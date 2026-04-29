@@ -3,165 +3,255 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LV Werkvoorbereiding – Ultimate Tool</title>
+  <title>LV Copilot Tool – Definitieve Teamversie</title>
 
- <!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <!-- Tesseract.js (OCR voor gescande PDFs, optioneel) -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; background:#f5f7fa; margin:0; padding:20px; }
+    body {
+      font-family: Arial, sans-serif;
+      background:#f5f7fa;
+      margin:0;
+      padding:16px;
+    }
+
     h1,h2,h3 { margin-top:0; }
-    textarea { width:100%; min-height:200px; padding:10px; font-family:monospace; }
-    button { padding:8px 14px; margin:6px 4px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
+    textarea {
+      width:100%;
+      min-height:160px;
+      padding:10px;
+      font-family:monospace;
+    }
+
+    button {
+      padding:8px 14px;
+      margin:6px 4px;
+      background:#2563eb;
+      color:white;
+      border:none;
+      border-radius:4px;
+      cursor:pointer;
+    }
+
     button.secondary { background:#6b7280; }
-    .box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
-    .prompt { font-size:12px; white-space:pre-wrap; background:#111827; color:#e5e7eb; padding:12px; border-radius:6px; }
-    input[type=file], input[type=text] { margin-top:6px; }
+    button.readonly { background:#16a34a; }
+
+    .box {
+      background:white;
+      padding:14px;
+      border-radius:6px;
+      margin-bottom:16px;
+    }
+
+    .prompt {
+      font-size:12px;
+      white-space:pre-wrap;
+      background:#111827;
+      color:#e5e7eb;
+      padding:12px;
+      border-radius:6px;
+    }
+
+    .risk-red {
+      background:#fee2e2;
+      border-left:6px solid #dc2626;
+      padding:10px;
+      margin-bottom:8px;
+    }
+
+    .risk-orange {
+      background:#ffedd5;
+      border-left:6px solid #ea580c;
+      padding:10px;
+      margin-bottom:8px;
+    }
+
+    .risk-green {
+      background:#dcfce7;
+      border-left:6px solid #16a34a;
+      padding:10px;
+      margin-bottom:8px;
+    }
+
     .small { font-size:12px; color:#555; }
+
+    @media (max-width: 600px) {
+      body { padding:10px; }
+      textarea { min-height:120px; }
+    }
   </style>
 </head>
 <body>
 
-<h1>LV Werkvoorbereiding – Ultimate Copilot Tool</h1>
-<p class="small">Gratis, lokaal in de browser. Geschikt voor grote LV’s door slim splitsen.</p>
+<h1>LV Copilot Tool – Definitieve Teamversie</h1>
+<p class="small">
+LV → posities → risico’s per positie (kleur) → Copilot → uitvoerder
+</p>
 
-<!-- BOX 1: Upload & selectie -->
+<!-- 1. Upload -->
 <div class="box">
-  <h2>1. LV uploaden en selecteren</h2>
+  <h2>1. LV upload</h2>
   <input type="file" id="fileInput" accept=".pdf" />
-  <p class="small">PDF wordt lokaal gelezen. Geen upload naar server.</p>
-
-  <label>Pagina’s (bijv. 1-5 of 12-20, leeg = alles):</label><br/>
-  <input type="text" id="pageRange" placeholder="bijv. 1-10" />
-
-  <br/><br/>
-  <button class="secondary" id="readPdfBtn">PDF uitlezen</button>
-  <button class="secondary" id="ocrBtn">OCR toepassen (gescande PDF)</button>
+  <button class="secondary" onclick="readPDF()">PDF lezen</button>
 </div>
 
-<!-- BOX 2: LV tekst -->
+<!-- 2. LV tekst -->
 <div class="box">
-  <h2>2. LV‑tekst (resultaat / handmatig aanpassen)</h2>
-  <textarea id="lvtext" placeholder="Hier verschijnt de uitgelezen LV-tekst..."></textarea>
-  <button class="secondary" id="saveProjectBtn">Huidige LV opslaan (browser)</button>
-  <span class="small">(opgeslagen in deze browser)</span>
+  <h2>2. LV‑tekst</h2>
+  <textarea id="lvtext" placeholder="LV‑tekst..."></textarea><br/>
+  <button class="secondary" onclick="splitPerPositie()">Splits per positie</button>
 </div>
 
-<!-- BOX 3: Prompt -->
+<!-- 3. Risico’s per positie -->
 <div class="box">
-  <h2>3. Ultieme Copilot‑prompt</h2>
+  <h2>3. Risico’s per positie (kleur)</h2>
+
+  <div class="small">
+    <strong>Legenda:</strong><br/>
+    🔴 Rood = AG‑freigabe / contractueel risico<br/>
+    🟠 Oranje = techniek / documentatie<br/>
+    🟢 Groen = standaard uitvoering
+  </div><br/>
+
+  <div id="riskOutput"></div>
+
+  <button class="secondary" onclick="detectRisksPerPositie()">Risico’s analyseren</button>
+  <button class="secondary" onclick="exportRisks()">Risico’s exporteren (TXT)</button>
+  <button class="secondary" onclick="printRisks()">Risico’s exporteren (PDF)</button>
+</div>
+
+<!-- 4. Checklist per positie -->
+<div class="box">
+  <h2>4. Checklist per positie</h2>
+  <textarea id="checklist" placeholder="Checklist per positie..."></textarea>
+  <button class="secondary" onclick="generateChecklist()">Checklist genereren</button>
+</div>
+
+<!-- 5. Copilot -->
+<div class="box">
+  <h2>5. Copilot‑prompt</h2>
   <div class="prompt" id="prompt">
-Je bent mijn ZEER ERVAREN digitale werkvoorbereider
-voor Duitse Tiefbau- en Kanalbau‑projecten.
-
-Analyseer de onderstaande LV‑tekst volledig en zet deze om
-naar praktische werkvoorbereiding.
-
-STRUCTUUR:
-1. Betekenis in normaal Nederlands
-2. Technische ontleding
-3. Uitvoering
-4. Calculatie‑aandachtspunten
-5. Werkvoorbereiding na gunning
-6. Documenten & AG‑freigabes
-7. Afhankelijkheden
-8. Risico- & meerwerkanalyse
-9. Praktische checklist
-
-Regels:
-- Liever waarschuwen dan aannemen
-- Benoem onzekerheden expliciet
-- Denk faalkosten‑gericht
+Je bent een ervaren werkvoorbereider.
+Analyseer het LV‑deel hieronder en geef:
+- betekenis
+- uitvoering
+- risico’s
+- checklist
 
 LV‑tekst:
   </div>
+  <button onclick="copyForCopilot()">Kopieer voor Copilot</button>
 </div>
 
-<!-- BOX 4: Acties -->
+<!-- 6. Uitvoerder -->
 <div class="box">
-  <h2>4. Acties</h2>
-  <button id="copyAllBtn">Prompt + LV kopiëren</button>
-  <button class="secondary" id="splitBtn">Splits LV in Copilot‑delen</button>
-  <p class="small">Tip: gebruik “deel 1/?, deel 2/?” bij lange LV’s</p>
+  <h2>6. Uitvoerder‑modus</h2>
+  <p class="small">Read‑only weergave (geen wijzigingen mogelijk)</p>
+  <button class="readonly" onclick="activateReadonly()">Activeer uitvoerder‑modus</button>
 </div>
 
 <script>
-  // PDF.js worker
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   const fileInput = document.getElementById('fileInput');
   const lvtext = document.getElementById('lvtext');
-  const pageRangeInput = document.getElementById('pageRange');
-
-  document.getElementById('readPdfBtn').onclick = readPDF;
-  document.getElementById('copyAllBtn').onclick = copyToClipboard;
-  document.getElementById('saveProjectBtn').onclick = saveProject;
-  document.getElementById('splitBtn').onclick = splitForCopilot;
-  document.getElementById('ocrBtn').onclick = runOCR;
+  const riskOutput = document.getElementById('riskOutput');
+  const checklist = document.getElementById('checklist');
 
   async function readPDF() {
     if (!fileInput.files[0]) { alert('Geen PDF gekozen'); return; }
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const typedArray = new Uint8Array(reader.result);
-      const pdf = await pdfjsLib.getDocument(typedArray).promise;
-
-      const range = parseRange(pageRangeInput.value, pdf.numPages);
-      let text = '';
-
-      for (let p of range) {
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        text += `\n\n=== PAGINA ${p} ===\n` + content.items.map(i => i.str).join(' ');
+    const r = new FileReader();
+    r.onload = async () => {
+      const pdf = await pdfjsLib.getDocument(new Uint8Array(r.result)).promise;
+      let txt='';
+      for (let i=1;i<=pdf.numPages;i++) {
+        const p = await pdf.getPage(i);
+        const c = await p.getTextContent();
+        txt += '\n=== PAGINA '+i+' ===\n' + c.items.map(x=>x.str).join(' ');
       }
-      lvtext.value = text;
-      alert('PDF uitgelezen');
+      lvtext.value = txt;
     };
-    reader.readAsArrayBuffer(file);
+    r.readAsArrayBuffer(fileInput.files[0]);
   }
 
-  function parseRange(val, max) {
-    if (!val) return Array.from({length: max}, (_,i)=>i+1);
-    const [a,b] = val.split('-').map(Number);
-    if (!a || !b) return Array.from({length: max}, (_,i)=>i+1);
-    return Array.from({length: b-a+1}, (_,i)=>a+i).filter(p=>p<=max);
-  }
-
-  async function runOCR() {
-    if (!lvtext.value.trim()) {
-      alert('OCR werkt alleen op gescande PDF’s nadat pagina’s zijn geselecteerd.');
-      return;
+  function splitPerPositie() {
+    const parts = lvtext.value.split(/(Pos\.?\s*\d+[\.\d]*)/gi);
+    let out='';
+    for (let i=1;i<parts.length;i+=2) {
+      out += '\n--- ' + parts[i] + ' ---\n' + (parts[i+1] || '');
     }
-    const result = await Tesseract.recognize(lvtext.value, 'deu');
-    lvtext.value = result.data.text;
-    alert('OCR uitgevoerd');
+    lvtext.value = out || lvtext.value;
   }
 
-  function copyToClipboard() {
-    const combined = document.getElementById('prompt').innerText + '\n\n' + lvtext.value;
-    navigator.clipboard.writeText(combined).then(()=>alert('Gekopieerd'));
+  function detectRisksPerPositie() {
+    riskOutput.innerHTML = '';
+    const titles = lvtext.value.match(/Pos\.?\s*\d+[\.\d]*/gi) || [];
+    const blocks = lvtext.value.split(/--- Pos\.?\s*\d+[\.\d]* ---/gi);
+
+    blocks.forEach((b,i)=>{
+      if (!titles[i]) return;
+      const t = b.toLowerCase();
+      let risks=[];
+      let level='green';
+
+      if (t.includes('freigabe') || t.includes('sonder')) {
+        risks.push('AG‑freigabe / Sonderpositie');
+        level='red';
+      }
+      if (t.includes('statik') || t.includes('nachweis')) {
+        risks.push('Technische berekening / documentatie');
+        if (level!=='red') level='orange';
+      }
+      if (risks.length===0) risks.push('Geen bijzondere risico’s');
+
+      const div=document.createElement('div');
+      div.className =
+        level==='red'?'risk-red':
+        level==='orange'?'risk-orange':'risk-green';
+
+      div.innerHTML = `<strong>${titles[i]}</strong><br/>${risks.join('<br/>')}`;
+      riskOutput.appendChild(div);
+    });
   }
 
-  function saveProject() {
-    localStorage.setItem('lvProject', lvtext.value);
-    alert('LV opgeslagen in browser');
+  function exportRisks() {
+    const blob = new Blob([riskOutput.innerText], {type:'text/plain'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='risico_overzicht_per_positie.txt';
+    a.click();
   }
 
-  function splitForCopilot() {
-    const text = lvtext.value;
-    const parts = text.match(/([\s\S]{1,4000})/g);
-    let output = '';
-    parts.forEach((p,i)=>{ output += `\n\n--- DEEL ${i+1}/${parts.length} ---\n` + p; });
-    lvtext.value = output;
-    alert('LV gesplitst in delen voor Copilot');
+  function printRisks() {
+    const w=window.open('');
+    w.document.write(riskOutput.innerHTML);
+    w.document.close();
+    w.print();
   }
 
-  // Herladen van opgeslagen project
-  if (localStorage.getItem('lvProject')) {
-    lvtext.value = localStorage.getItem('lvProject');
+  function generateChecklist() {
+    checklist.value =
+`☐ LV gelezen per positie
+☐ Hoeveelheden gecontroleerd
+☐ Leveranciers bepaald
+☐ Documentatie beschikbaar
+☐ AG‑freigabes geregeld
+☐ Risico’s besproken met uitvoerder`;
+  }
+
+  function copyForCopilot() {
+    navigator.clipboard.writeText(
+      document.getElementById('prompt').innerText + '\n\n' + lvtext.value
+    );
+    alert('Gekopieerd voor Copilot');
+  }
+
+  function activateReadonly() {
+    lvtext.readOnly=true;
+    checklist.readOnly=true;
+    alert('Uitvoerder‑modus actief');
   }
 </script>
 
