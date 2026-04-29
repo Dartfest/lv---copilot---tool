@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LV Analyse Tool (Copilot)</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f5f7fa; margin:0; padding:20px; }
+    h1 { margin-top:0; }
+    textarea { width:100%; min-height:220px; padding:10px; font-family:monospace; }
+    button { padding:10px 16px; margin-top:10px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
+    button.secondary { background:#6b7280; }
+    .box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
+    .prompt { font-size:12px; white-space:pre-wrap; background:#111827; color:#e5e7eb; padding:12px; border-radius:6px; }
+  </style>
+</head>
+<body>
+
+<h1>LV Werkvoorbereiding – Ultimate Tool</h1>
+<p>Gebruik deze pagina om steeds dezelfde ultieme Copilot‑analyse toe te passen op Duitse LV‑teksten.</p>
+
+<div class="box">
+  <h2>1. LV‑tekst (plakken)</h2>
+  <textarea id="lvtext" placeholder="Plak hier de Duitse LV‑tekst..."> </textarea>
+</div>
+
+<div class="box">
+  <h2>2. Ultieme Copilot‑prompt</h2>
+  <div class="prompt" id="prompt">
+Je bent mijn ZEER ERVAREN digitale werkvoorbereider voor Duitse Tiefbau- en Kanalbau‑projecten.
+
+DOEL:
+Analyseer de onderstaande LV‑tekst volledig en zet deze om naar praktische werkvoorbereiding, volgens vaste structuur:
+
+1. Betekenis in normaal Nederlands
+2. Technische ontleding
+3. Uitvoering – wat moet er gebeuren
+4. Calculatie‑aandachtspunten
+5. Werkvoorbereiding na gunning
+6. Documenten en AG‑freigabes
+7. Afhankelijkheden
+8. Risico- en meerwerkanalyse
+9. Praktische checklist
+
+Regels:
+- Liever waarschuwen dan aannemen
+- Benoem onzekerheden expliciet
+- Denk faalkosten‑gericht
+- Schrijf praktisch en duidelijk
+
+LV‑tekst:
+  </div>
+</div>
+
+<div class="box">
+  <h2>3. Gebruik</h2>
+  <p>
+    <strong>Stap A:</strong> Selecteer alles in het zwarte prompt‑vak.<br/>
+    <strong>Stap B:</strong> Kopieer (Ctrl+C).<br/>
+    <strong>Stap C:</strong> Plak dit in Copilot en zet daaronder jouw LV‑tekst.<br/>
+  </p>
+  <button onclick="copyPrompt()">Prompt kopiëren</button>
+</div>
+
+<script>
+  function copyPrompt() {
+    const text = document.getElementById('prompt').innerText + '\n\n' + document.getElementById('lvtext').value;
+    navigator.clipboard.writeText(text);
+    alert('Prompt + LV‑tekst gekopieerd. Plak dit nu in Copilot.');
+  }
+</script>
+
+</body>
+</html>
