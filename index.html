@@ -1,40 +1,61 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LV Copilot Tool – OZ‑splitsing</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LV Copilot Tool – Risico’s met categorieën</title>
 
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; background:#f5f7fa; margin:0; padding:16px; }
-    h1,h2 { margin-top:0; }
-    textarea { width:100%; min-height:180px; padding:10px; font-family:monospace; }
-    button { padding:8px 14px; margin:6px 4px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
+    body { font-family: Arial, sans-serif; background:#f5f7fa; margin:0; padding:20px; }
+    h1,h2,h3 { margin-top:0; }
+
+    textarea {
+      width:100%;
+      min-height:180px;
+      padding:10px;
+      font-family:monospace;
+    }
+
+    button {
+      padding:8px 14px;
+      margin:6px 4px;
+      background:#2563eb;
+      color:white;
+      border:none;
+      border-radius:4px;
+      cursor:pointer;
+    }
     button.secondary { background:#6b7280; }
+    button.readonly { background:#16a34a; }
 
-    .box { background:white; padding:14px; border-radius:6px; margin-bottom:16px; }
+    .box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
 
-    .risk-red { background:#fee2e2; border-left:6px solid #dc2626; padding:8px; margin-bottom:6px; }
-    .risk-orange { background:#ffedd5; border-left:6px solid #ea580c; padding:8px; margin-bottom:6px; }
-    .risk-green { background:#dcfce7; border-left:6px solid #16a34a; padding:8px; margin-bottom:6px; }
+    .chunk {
+      border-radius:6px;
+      padding:10px;
+      margin-bottom:12px;
+    }
+    .red { background:#fee2e2; border-left:6px solid #dc2626; }
+    .orange { background:#ffedd5; border-left:6px solid #ea580c; }
+    .green { background:#dcfce7; border-left:6px solid #16a34a; }
 
     .small { font-size:12px; color:#555; }
   </style>
 </head>
 <body>
 
-<h1>LV Copilot Tool – Splitsen per OZ</h1>
+<h1>LV Copilot Tool – Copilot‑delen met risicocategorieën</h1>
 <p class="small">
-PDF → **OZ‑splitsing** → risico’s → Copilot
+LV → Copilot‑delen → risico + categorieën → export → uitvoerder read‑only
 </p>
 
 <!-- 1. PDF upload -->
 <div class="box">
-  <h2>1. LV PDF</h2>
-  <input type="file" id="fileInput" accept=".pdf" />
+  <h2>1. LV PDF upload</h2>
+  <input type="file" id="fileInput" accept=".pdf">
   <button class="secondary" onclick="readPDF()">PDF lezen</button>
 </div>
 
@@ -42,37 +63,45 @@ PDF → **OZ‑splitsing** → risico’s → Copilot
 <div class="box">
   <h2>2. LV‑tekst</h2>
   <textarea id="lvtext" placeholder="LV‑tekst verschijnt hier..."></textarea>
-  <br/>
-  <button class="secondary" onclick="splitPerOZ()">✅ Splits per OZ</button>
+  <br>
+  <button class="secondary" onclick="splitIntoChunks()">Splits in Copilot‑delen</button>
 </div>
 
-<!-- 3. Risico’s per OZ -->
+<!-- 3. Copilot delen -->
 <div class="box">
-  <h2>3. Risico’s per OZ</h2>
-  <div id="riskOutput"></div>
-  <button class="secondary" onclick="detectRisksPerOZ()">Risico’s analyseren</button>
+  <h2>3. Copilot‑delen (met risico & categorieën)</h2>
+  <div id="chunks"></div>
+</div>
+
+<!-- 4. Risico export -->
+<div class="box">
+  <h2>4. Risico‑overzicht</h2>
+  <button class="secondary" onclick="exportRisks()">Risico‑overzicht exporteren (TXT)</button>
+</div>
+
+<!-- 5. Uitvoerder -->
+<div class="box">
+  <h2>5. Uitvoerder‑modus</h2>
+  <p class="small">Alleen lezen – geen wijzigingen mogelijk</p>
+  <button class="readonly" onclick="activateReadonly()">Activeer read‑only</button>
 </div>
 
 <script>
-  // PDF.js worker
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   const fileInput = document.getElementById('fileInput');
   const lvtext = document.getElementById('lvtext');
-  const riskOutput = document.getElementById('riskOutput');
+  const chunksDiv = document.getElementById('chunks');
 
+  let chunksData = [];
+
+  /* PDF lezen */
   async function readPDF() {
-    if (!fileInput.files[0]) {
-      alert('Geen PDF gekozen');
-      return;
-    }
-
+    if (!fileInput.files[0]) { alert('Geen PDF gekozen'); return; }
     const reader = new FileReader();
     reader.onload = async () => {
-      const pdf = await pdfjsLib
-        .getDocument(new Uint8Array(reader.result)).promise;
-
+      const pdf = await pdfjsLib.getDocument(new Uint8Array(reader.result)).promise;
       let text = '';
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
@@ -82,69 +111,115 @@ PDF → **OZ‑splitsing** → risico’s → Copilot
       }
       lvtext.value = text;
     };
-
     reader.readAsArrayBuffer(fileInput.files[0]);
   }
 
-  /*
-    ✅ OZ‑SPLITSING
-    Werkt met o.a.:
-    - OZ
-    - OZ. 1
-    - OZ 1.2
-    - OZ 1.02.003
-  */
-  function splitPerOZ() {
-    const text = lvtext.value;
+  /* LV splitsen */
+  function splitIntoChunks() {
+    chunksDiv.innerHTML = '';
+    chunksData = [];
 
-    const regex =
-      /(OZ\.?\s*\d*(?:\.\d+)*)\s*([\s\S]*?)(?=(?:\n|\r)*OZ\.?\s*\d*(?:\.\d+)*|$)/gi;
+    const MAX = 3600;
+    const parts = lvtext.value.match(new RegExp('[\\s\\S]{1,'+MAX+'}','g')) || [];
 
-    let output = '';
-    let match;
+    parts.forEach((part, i) => {
+      const risk = analyseRisk(part);
 
-    while ((match = regex.exec(text)) !== null) {
-      const oz = match[1].trim();
-      const inhoud = match[2].trim();
-      output += '\n--- ' + oz + ' ---\n' + inhoud + '\n';
+      chunksData.push({
+        deel: i + 1,
+        niveau: risk.label,
+        categorieën: risk.categories
+      });
+
+      const div = document.createElement('div');
+      div.className = `chunk ${risk.class}`;
+      div.innerHTML = `
+        <strong>DEEL ${i+1}/${parts.length} – ${risk.label}</strong><br>
+        <em>Categorieën:</em> ${risk.categories.join(', ') || '–'}<br><br>
+        <pre style="white-space:pre-wrap;">${part}</pre>
+        <button onclick="copyChunk(${i})">Kopieer dit deel</button>
+      `;
+      chunksDiv.appendChild(div);
+    });
+  }
+
+  /* Risico + categorie analyse */
+  function analyseRisk(text) {
+    const t = text.toLowerCase();
+    let categories = [];
+    let level = 'green';
+    let label = 'LAAG RISICO';
+
+    if (t.includes('freigabe') || t.includes('vertrag') || t.includes('ag ')) {
+      categories.push('Contractueel');
+      level = 'red';
+      label = 'HOOG RISICO';
+    }
+    if (t.includes('sonder') || t.includes('meerwerk') || t.includes('abweich')) {
+      categories.push('Meerwerk');
+      level = 'red';
+      label = 'HOOG RISICO';
+    }
+    if (t.includes('statik') || t.includes('nachweis') || t.includes('berekening')) {
+      categories.push('Technisch');
+      if (level !== 'red') {
+        level = 'orange';
+        label = 'MIDDEL RISICO';
+      }
+    }
+    if (t.includes('termijn') || t.includes('wachttijd') || t.includes('planning')) {
+      categories.push('Planning');
+      if (level === 'green') {
+        level = 'orange';
+        label = 'MIDDEL RISICO';
+      }
+    }
+    if (t.includes('keuring') || t.includes('kwaliteit')) {
+      categories.push('Kwaliteit');
+      if (level === 'green') {
+        level = 'orange';
+        label = 'MIDDEL RISICO';
+      }
     }
 
-    if (!output.trim()) {
-      alert('❌ Geen OZ‑blokken gevonden. Controleer of “OZ” in de tekst staat.');
+    return { class: level, label, categories };
+  }
+
+  /* Kopieer Copilot deel */
+  function copyChunk(index) {
+    navigator.clipboard.writeText(
+      document.querySelectorAll('.chunk pre')[index].innerText
+    );
+    alert('Deel gekopieerd voor Copilot');
+  }
+
+  /* Export risico overzicht */
+  function exportRisks() {
+    if (chunksData.length === 0) {
+      alert('Nog geen Copilot‑delen');
       return;
     }
 
-    lvtext.value = output.trim();
+    let output = 'RISICO-OVERZICHT LV\n\n';
+    chunksData.forEach(c => {
+      output += `DEEL ${c.deel}: ${c.niveau}\n`;
+      output += `Categorieën: ${c.categorieën.join(', ') || '–'}\n\n`;
+    });
+
+    const blob = new Blob([output], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'risico-overzicht.txt';
+    a.click();
   }
 
-  function detectRisksPerOZ() {
-    riskOutput.innerHTML = '';
-
-    const blocks = lvtext.value.split(/---\s*OZ/).filter(Boolean);
-
-    blocks.forEach(block => {
-      const lines = block.split('\n');
-      const oz = 'OZ ' + lines[0].trim();
-      const t = block.toLowerCase();
-
-      let risks = [];
-      let css = 'risk-green';
-
-      if (t.includes('afwijk') || t.includes('meerwerk')) {
-        risks.push('Afwijking / meerwerk risico');
-        css = 'risk-red';
-      } else if (t.includes('keur') || t.includes('bewijs') || t.includes('berekening')) {
-        risks.push('Technische onderbouwing / bewijs');
-        css = 'risk-orange';
-      } else {
-        risks.push('Geen bijzonder risico');
-      }
-
-      const div = document.createElement('div');
-      div.className = css;
-      div.innerHTML = `<strong>${oz}</strong><br>${risks.join('<br>')}`;
-      riskOutput.appendChild(div);
+  /* Read-only uitvoerder */
+  function activateReadonly() {
+    lvtext.readOnly = true;
+    document.querySelectorAll('button').forEach(b => {
+      if (!b.classList.contains('readonly')) b.disabled = true;
     });
+    alert('Uitvoerder‑modus actief');
   }
 </script>
 
