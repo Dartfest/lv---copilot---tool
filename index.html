@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LV Copilot Tool – Positie‑splitsing FIX</title>
+  <title>LV Copilot Tool – Werkende PDF & Positie‑splitsing</title>
 
-  <!-- PDF.js -->
+  <!-- PDF.js (CORRECT geladen) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
@@ -14,28 +14,21 @@
     textarea { width:100%; min-height:180px; padding:10px; font-family:monospace; }
     button { padding:8px 14px; margin:6px 4px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
     button.secondary { background:#6b7280; }
-    button.readonly { background:#16a34a; }
-
     .box { background:white; padding:14px; border-radius:6px; margin-bottom:16px; }
-    .prompt { font-size:12px; white-space:pre-wrap; background:#111827; color:#e5e7eb; padding:12px; border-radius:6px; }
-
-    .risk-red { background:#fee2e2; border-left:6px solid #dc2626; padding:10px; margin-bottom:8px; }
-    .risk-orange { background:#ffedd5; border-left:6px solid #ea580c; padding:10px; margin-bottom:8px; }
-    .risk-green { background:#dcfce7; border-left:6px solid #16a34a; padding:10px; margin-bottom:8px; }
-
+    .risk-red { background:#fee2e2; border-left:6px solid #dc2626; padding:8px; margin-bottom:6px; }
+    .risk-orange { background:#ffedd5; border-left:6px solid #ea580c; padding:8px; margin-bottom:6px; }
+    .risk-green { background:#dcfce7; border-left:6px solid #16a34a; padding:8px; margin-bottom:6px; }
     .small { font-size:12px; color:#555; }
   </style>
 </head>
 <body>
 
-<h1>LV Copilot Tool – Definitieve Positieversie</h1>
-<p class="small">
-LV upload → ECHT splitsen per positie → risico per positie → Copilot / uitvoerder
-</p>
+<h1>LV Copilot Tool</h1>
+<p class="small">PDF lezen ✅ | Positie‑splitsing ✅ | Risico per positie ✅</p>
 
-<!-- 1. Upload -->
+<!-- 1. PDF upload -->
 <div class="box">
-  <h2>1. LV upload</h2>
+  <h2>1. LV PDF</h2>
   <input type="file" id="fileInput" accept=".pdf" />
   <button class="secondary" onclick="readPDF()">PDF lezen</button>
 </div>
@@ -43,48 +36,16 @@ LV upload → ECHT splitsen per positie → risico per positie → Copilot / uit
 <!-- 2. LV tekst -->
 <div class="box">
   <h2>2. LV‑tekst</h2>
-  <textarea id="lvtext" placeholder="LV‑tekst..."></textarea><br/>
-  <button class="secondary" onclick="splitPerPositie()">✅ Splits per positie</button>
+  <textarea id="lvtext" placeholder="LV‑tekst verschijnt hier..."></textarea>
+  <br/>
+  <button class="secondary" onclick="splitPerPositie()">Splits per positie</button>
 </div>
 
-<!-- 3. Risico’s per positie -->
+<!-- 3. Risico per positie -->
 <div class="box">
   <h2>3. Risico’s per positie</h2>
-
-  <div class="small">
-    <strong>Legenda:</strong><br/>
-    🔴 Rood = AG‑freigabe / Sonderpositie<br/>
-    🟠 Oranje = techniek / documentatie<br/>
-    🟢 Groen = standaard
-  </div><br/>
-
   <div id="riskOutput"></div>
-
   <button class="secondary" onclick="detectRisksPerPositie()">Risico’s analyseren</button>
-  <button class="secondary" onclick="exportRisks()">Risico’s exporteren (TXT)</button>
-</div>
-
-<!-- 4. Copilot -->
-<div class="box">
-  <h2>4. Copilot‑prompt</h2>
-  <div class="prompt" id="prompt">
-Je bent een ervaren werkvoorbereider.
-Analyseer het LV‑deel hieronder en geef:
-- betekenis
-- uitvoering
-- risico’s
-- checklist
-
-LV‑tekst:
-  </div>
-  <button onclick="copyForCopilot()">Kopieer voor Copilot</button>
-</div>
-
-<!-- 5. Uitvoerder -->
-<div class="box">
-  <h2>5. Uitvoerder‑modus</h2>
-  <p class="small">Read‑only modus для uitvoering</p>
-  <button class="readonly" onclick="activateReadonly()">Activeer uitvoerder‑modus</button>
 </div>
 
 <script>
@@ -97,101 +58,74 @@ LV‑tekst:
   const riskOutput = document.getElementById('riskOutput');
 
   async function readPDF() {
-    if (!fileInput.files[0]) { alert('Geen PDF gekozen'); return; }
-    const r = new FileReader();
-    r.onload = async () => {
-      const pdf = await pdfjsLib.getDocument(new Uint8Array(r.result)).promise;
-      let txt='';
-      for (let i=1;i<=pdf.numPages;i++) {
-        const p = await pdf.getPage(i);
-        const c = await p.getTextContent();
-        txt += '\\n=== PAGINA ' + i + ' ===\\n' + c.items.map(x=>x.str).join(' ');
-      }
-      lvtext.value = txt;
-    };
-    r.readAsArrayBuffer(fileInput.files[0]);
-  }
-
-  /*
-    ✅ DEFINITIEVE POSITIE‑SPLITSING
-    Herkent o.a.:
-    - Pos. 01
-    - Pos 01.02
-    - Pos. 01.02.003
-  */
-  function splitPerPositie() {
-    const text = lvtext.value;
-    const regex = /(Pos\\.?\\s*\\d+(?:\\.\\d+)*)\\s*([\\s\\S]*?)(?=(?:\\n|\\r)*Pos\\.?\\s*\\d+(?:\\.\\d+)*|$)/gi;
-
-    let output = '';
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-      const positie = match[1].trim();
-      const inhoud = match[2].trim();
-      output += `\\n--- ${positie} ---\\n${inhoud}\\n`;
-    }
-
-    if (!output.trim()) {
-      alert('❌ Geen posities gevonden. Controleer of \"Pos.\" in de LV staat.');
+    if (!fileInput.files[0]) {
+      alert('Geen PDF gekozen');
       return;
     }
 
-    lvtext.value = output.trim();
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const pdf = await pdfjsLib
+        .getDocument(new Uint8Array(reader.result)).promise;
+
+      let text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += '\n=== PAGINA ' + i + ' ===\n' +
+                content.items.map(item => item.str).join(' ');
+      }
+      lvtext.value = text;
+    };
+
+    reader.readAsArrayBuffer(fileInput.files[0]);
+  }
+
+  /* POSITIE SPLITSING (stabiel) */
+  function splitPerPositie() {
+    const regex = /(Pos\.?\s*\d+(?:\.\d+)*)\s*([\s\S]*?)(?=Pos\.?\s*\d+(?:\.\d+)*|$)/gi;
+    let result = '';
+    let match;
+
+    while ((match = regex.exec(lvtext.value)) !== null) {
+      result += '\n--- ' + match[1] + ' ---\n' + match[2].trim() + '\n';
+    }
+
+    if (!result) {
+      alert('Geen posities gevonden');
+      return;
+    }
+
+    lvtext.value = result.trim();
   }
 
   function detectRisksPerPositie() {
     riskOutput.innerHTML = '';
-
-    const blocks = lvtext.value.split(/---\\s*Pos\\.?/).filter(Boolean);
+    const blocks = lvtext.value.split(/---\s*Pos/).filter(Boolean);
 
     blocks.forEach(block => {
-      const lines = block.split('\\n');
-      const pos = 'Pos. ' + lines[0].trim();
-      const text = block.toLowerCase();
+      const lines = block.split('\n');
+      const pos = 'Pos' + lines[0];
+      const t = block.toLowerCase();
 
-      let risico’s = [];
-      let kleur = 'green';
+      let risks = [];
+      let css = 'risk-green';
 
-      if (text.includes('freigabe') || text.includes('sonder')) {
-        risico’s.push('AG‑freigabe / Sonderpositie');
-        kleur = 'red';
-      }
-      if ((text.includes('statik') || text.includes('nachweis')) && kleur !== 'red') {
-        risico’s.push('Technische berekening / documentatie');
-        kleur = 'orange';
-      }
-      if (risico’s.length === 0) {
-        risico’s.push('Geen bijzondere risico’s');
+      if (t.includes('freigabe') || t.includes('sonder')) {
+        risks.push('AG‑freigabe / Sonderpositie');
+        css = 'risk-red';
+      } else if (t.includes('statik') || t.includes('nachweis')) {
+        risks.push('Technische eisen / documentatie');
+        css = 'risk-orange';
+      } else {
+        risks.push('Geen bijzonder risico');
       }
 
       const div = document.createElement('div');
-      div.className = kleur === 'red' ? 'risk-red' :
-                      kleur === 'orange' ? 'risk-orange' : 'risk-green';
-
-      div.innerHTML = `<strong>${pos}</strong><br/>${risico’s.join('<br/>')}`;
+      div.className = css;
+      div.innerHTML = `<strong>${pos}</strong><br>${risks.join('<br>')}`;
       riskOutput.appendChild(div);
     });
-  }
-
-  function exportRisks() {
-    const blob = new Blob([riskOutput.innerText], {type:'text/plain'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'risico_overzicht_per_positie.txt';
-    a.click();
-  }
-
-  function copyForCopilot() {
-    navigator.clipboard.writeText(
-      document.getElementById('prompt').innerText + '\\n\\n' + lvtext.value
-    );
-    alert('Gekopieerd voor Copilot');
-  }
-
-  function activateReadonly() {
-    lvtext.readOnly = true;
-    alert('Uitvoerder‑modus actief (alleen lezen)');
   }
 </script>
 
