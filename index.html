@@ -5,73 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LV Werkvoorbereiding – Ultimate Tool</title>
 
-  <!-- PDF.js (client-side PDF uitlezen) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+ <!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Tesseract.js (OCR voor gescande PDFs, optioneel) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f5f7fa;
-      margin: 0;
-      padding: 20px;
-    }
-    h1 { margin-top: 0; }
-    textarea {
-      width: 100%;
-      min-height: 220px;
-      padding: 10px;
-      font-family: monospace;
-    }
-    button {
-      padding: 10px 16px;
-      margin-top: 10px;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .box {
-      background: white;
-      padding: 16px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-    }
-    .prompt {
-      font-size: 12px;
-      white-space: pre-wrap;
-      background: #111827;
-      color: #e5e7eb;
-      padding: 12px;
-      border-radius: 6px;
-    }
-    input[type=file] { margin-top: 8px; }
+    body { font-family: Arial, sans-serif; background:#f5f7fa; margin:0; padding:20px; }
+    h1,h2,h3 { margin-top:0; }
+    textarea { width:100%; min-height:200px; padding:10px; font-family:monospace; }
+    button { padding:8px 14px; margin:6px 4px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
+    button.secondary { background:#6b7280; }
+    .box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
+    .prompt { font-size:12px; white-space:pre-wrap; background:#111827; color:#e5e7eb; padding:12px; border-radius:6px; }
+    input[type=file], input[type=text] { margin-top:6px; }
+    .small { font-size:12px; color:#555; }
   </style>
 </head>
-
 <body>
 
 <h1>LV Werkvoorbereiding – Ultimate Copilot Tool</h1>
-<p>Upload een Duits LV (PDF) of plak tekst. Alles wordt lokaal verwerkt.</p>
+<p class="small">Gratis, lokaal in de browser. Geschikt voor grote LV’s door slim splitsen.</p>
 
-<!-- VAK 1 -->
+<!-- BOX 1: Upload & selectie -->
 <div class="box">
-  <h2>1. LV‑tekst (PDF uploaden of plakken)</h2>
+  <h2>1. LV uploaden en selecteren</h2>
   <input type="file" id="fileInput" accept=".pdf" />
-  <p style="font-size:12px;color:#555;">
-    PDF wordt lokaal in de browser gelezen (geen upload).
-  </p>
-  <textarea id="lvtext" placeholder="Of plak hier handmatig de Duitse LV‑tekst..."></textarea>
+  <p class="small">PDF wordt lokaal gelezen. Geen upload naar server.</p>
+
+  <label>Pagina’s (bijv. 1-5 of 12-20, leeg = alles):</label><br/>
+  <input type="text" id="pageRange" placeholder="bijv. 1-10" />
+
+  <br/><br/>
+  <button class="secondary" id="readPdfBtn">PDF uitlezen</button>
+  <button class="secondary" id="ocrBtn">OCR toepassen (gescande PDF)</button>
 </div>
 
-<!-- VAK 2 -->
+<!-- BOX 2: LV tekst -->
 <div class="box">
-  <h2>2. Ultieme Copilot‑prompt</h2>
+  <h2>2. LV‑tekst (resultaat / handmatig aanpassen)</h2>
+  <textarea id="lvtext" placeholder="Hier verschijnt de uitgelezen LV-tekst..."></textarea>
+  <button class="secondary" id="saveProjectBtn">Huidige LV opslaan (browser)</button>
+  <span class="small">(opgeslagen in deze browser)</span>
+</div>
+
+<!-- BOX 3: Prompt -->
+<div class="box">
+  <h2>3. Ultieme Copilot‑prompt</h2>
   <div class="prompt" id="prompt">
 Je bent mijn ZEER ERVAREN digitale werkvoorbereider
 voor Duitse Tiefbau- en Kanalbau‑projecten.
 
-DOEL:
 Analyseer de onderstaande LV‑tekst volledig en zet deze om
 naar praktische werkvoorbereiding.
 
@@ -81,9 +65,9 @@ STRUCTUUR:
 3. Uitvoering
 4. Calculatie‑aandachtspunten
 5. Werkvoorbereiding na gunning
-6. Documenten en AG‑freigabes
+6. Documenten & AG‑freigabes
 7. Afhankelijkheden
-8. Risico- en meerwerk
+8. Risico- & meerwerkanalyse
 9. Praktische checklist
 
 Regels:
@@ -95,76 +79,91 @@ LV‑tekst:
   </div>
 </div>
 
-<!-- VAK 3 -->
+<!-- BOX 4: Acties -->
 <div class="box">
-  <h2>3. Gebruik</h2>
-  <p>
-    Upload PDF of plak tekst → klik op de knop → plak in Copilot
-  </p>
-  <button id="copyBtn">Prompt + LV kopiëren</button>
+  <h2>4. Acties</h2>
+  <button id="copyAllBtn">Prompt + LV kopiëren</button>
+  <button class="secondary" id="splitBtn">Splits LV in Copilot‑delen</button>
+  <p class="small">Tip: gebruik “deel 1/?, deel 2/?” bij lange LV’s</p>
 </div>
 
 <script>
-  // PDF.js worker (VERPLICHT)
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  // PDF.js worker
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   const fileInput = document.getElementById('fileInput');
   const lvtext = document.getElementById('lvtext');
-  const copyBtn = document.getElementById('copyBtn');
+  const pageRangeInput = document.getElementById('pageRange');
 
-  // PDF uitlezen
-  fileInput.addEventListener('change', async () => {
+  document.getElementById('readPdfBtn').onclick = readPDF;
+  document.getElementById('copyAllBtn').onclick = copyToClipboard;
+  document.getElementById('saveProjectBtn').onclick = saveProject;
+  document.getElementById('splitBtn').onclick = splitForCopilot;
+  document.getElementById('ocrBtn').onclick = runOCR;
+
+  async function readPDF() {
+    if (!fileInput.files[0]) { alert('Geen PDF gekozen'); return; }
     const file = fileInput.files[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('Kies een geldig PDF‑bestand.');
-      return;
-    }
-
     const reader = new FileReader();
     reader.onload = async () => {
-      try {
-        const typedArray = new Uint8Array(reader.result);
-        const pdf = await pdfjsLib.getDocument(typedArray).promise;
+      const typedArray = new Uint8Array(reader.result);
+      const pdf = await pdfjsLib.getDocument(typedArray).promise;
 
-        let fullText = '';
-        for (let p = 1; p <= pdf.numPages; p++) {
-          const page = await pdf.getPage(p);
-          const content = await page.getTextContent();
-          const text = content.items.map(i => i.str).join(' ');
-          fullText += `\n\n=== PAGINA ${p} ===\n${text}`;
-        }
+      const range = parseRange(pageRangeInput.value, pdf.numPages);
+      let text = '';
 
-        lvtext.value = fullText;
-        alert('✅ PDF succesvol uitgelezen');
-      } catch (e) {
-        console.error(e);
-        alert('❌ Fout bij lezen van PDF');
+      for (let p of range) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        text += `\n\n=== PAGINA ${p} ===\n` + content.items.map(i => i.str).join(' ');
       }
+      lvtext.value = text;
+      alert('PDF uitgelezen');
     };
-
     reader.readAsArrayBuffer(file);
-  });
+  }
 
-  // Kopiëren
-  copyBtn.addEventListener('click', async () => {
-    const prompt = document.getElementById('prompt').innerText;
-    const lv = lvtext.value;
+  function parseRange(val, max) {
+    if (!val) return Array.from({length: max}, (_,i)=>i+1);
+    const [a,b] = val.split('-').map(Number);
+    if (!a || !b) return Array.from({length: max}, (_,i)=>i+1);
+    return Array.from({length: b-a+1}, (_,i)=>a+i).filter(p=>p<=max);
+  }
 
-    if (!lv.trim()) {
-      alert('❗ Geen LV‑tekst aanwezig');
+  async function runOCR() {
+    if (!lvtext.value.trim()) {
+      alert('OCR werkt alleen op gescande PDF’s nadat pagina’s zijn geselecteerd.');
       return;
     }
+    const result = await Tesseract.recognize(lvtext.value, 'deu');
+    lvtext.value = result.data.text;
+    alert('OCR uitgevoerd');
+  }
 
-    try {
-      await navigator.clipboard.writeText(prompt + '\n\n' + lv);
-      alert('✅ Prompt + LV gekopieerd');
-    } catch {
-      alert('❌ Kopiëren mislukt');
-    }
-  });
+  function copyToClipboard() {
+    const combined = document.getElementById('prompt').innerText + '\n\n' + lvtext.value;
+    navigator.clipboard.writeText(combined).then(()=>alert('Gekopieerd'));
+  }
+
+  function saveProject() {
+    localStorage.setItem('lvProject', lvtext.value);
+    alert('LV opgeslagen in browser');
+  }
+
+  function splitForCopilot() {
+    const text = lvtext.value;
+    const parts = text.match(/([\s\S]{1,4000})/g);
+    let output = '';
+    parts.forEach((p,i)=>{ output += `\n\n--- DEEL ${i+1}/${parts.length} ---\n` + p; });
+    lvtext.value = output;
+    alert('LV gesplitst in delen voor Copilot');
+  }
+
+  // Herladen van opgeslagen project
+  if (localStorage.getItem('lvProject')) {
+    lvtext.value = localStorage.getItem('lvProject');
+  }
 </script>
 
 </body>
 </html>
-``
