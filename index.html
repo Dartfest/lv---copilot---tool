@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -6,7 +8,7 @@
   <title>LV Werkvoorbereiding – Ultimate Tool</title>
 
 
- <!-- PDF.js (client-side PDF uitlezen) -->
+<!-- PDF.js (client-side PDF uitlezen) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 
@@ -78,54 +80,60 @@ LV‑tekst:
 </div>
 
 <script>
+  // PDF.js worker verplicht instellen (CRUCIAAL)
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+
   const fileInput = document.getElementById('fileInput');
   const lvtext = document.getElementById('lvtext');
 
-
-  // PDF uitlezen met PDF.js
+  // PDF uitlezen
   fileInput.addEventListener('change', async function () {
-    const file = this.files[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('Kies een geldig PDF‑bestand.');
-      return;
-    }
-
-
-    const reader = new FileReader();
-    reader.onload = async function () {
-      const typedArray = new Uint8Array(this.result);
-      const pdf = await pdfjsLib.getDocument(typedArray).promise;
-
-
-      let fullText = '';
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const content = await page.getTextContent();
-        const pageText = content.items.map(item => item.str).join(' ');
-        fullText += `
-
-
+    try {
+      const file = this.files[0];
+      if (!file || file.type !== 'application/pdf') {
+        alert('Kies een geldig PDF-bestand.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async function () {
+        const typedArray = new Uint8Array(this.result);
+        const pdf = await pdfjsLib.getDocument(typedArray).promise;
+        let fullText = '';
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(i => i.str).join(' ');
+          fullText += `
 === PAGINA ${pageNum} ===
 ${pageText}`;
-      }
-
-
-      lvtext.value = fullText;
-    };
-
-
-    reader.readAsArrayBuffer(file);
+        }
+        lvtext.value = fullText;
+        alert('PDF succesvol uitgelezen!');
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      console.error(err);
+      alert('Fout bij lezen van PDF.');
+    }
   });
-
 
   // Prompt + LV tekst kopiëren
   function copyPrompt() {
-    const combined = document.getElementById('prompt').innerText + '
+    const promptText = document.getElementById('prompt').innerText;
+    const lvValue = lvtext.value;
+    if (!lvValue.trim()) {
+      alert('Geen LV-tekst gevonden om te kopiëren.');
+      return;
+    }
+    const combined = promptText + '
 
 
-' + lvtext.value;
-    navigator.clipboard.writeText(combined);
-    alert('Prompt + LV‑tekst gekopieerd. Plak dit nu in Copilot.');
+' + lvValue;
+    navigator.clipboard.writeText(combined)
+      .then(() => alert('Prompt + LV-tekst gekopieerd ✅'))
+      .catch(() => alert('Kopiëren mislukt.'));
   }
 </script>
 
