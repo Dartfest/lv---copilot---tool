@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LV Copilot Tool – Werkende PDF & Positie‑splitsing</title>
+  <title>LV Copilot Tool – OZ‑splitsing</title>
 
-  <!-- PDF.js (CORRECT geladen) -->
+  <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
@@ -14,17 +14,22 @@
     textarea { width:100%; min-height:180px; padding:10px; font-family:monospace; }
     button { padding:8px 14px; margin:6px 4px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
     button.secondary { background:#6b7280; }
+
     .box { background:white; padding:14px; border-radius:6px; margin-bottom:16px; }
+
     .risk-red { background:#fee2e2; border-left:6px solid #dc2626; padding:8px; margin-bottom:6px; }
     .risk-orange { background:#ffedd5; border-left:6px solid #ea580c; padding:8px; margin-bottom:6px; }
     .risk-green { background:#dcfce7; border-left:6px solid #16a34a; padding:8px; margin-bottom:6px; }
+
     .small { font-size:12px; color:#555; }
   </style>
 </head>
 <body>
 
-<h1>LV Copilot Tool</h1>
-<p class="small">PDF lezen ✅ | Positie‑splitsing ✅ | Risico per positie ✅</p>
+<h1>LV Copilot Tool – Splitsen per OZ</h1>
+<p class="small">
+PDF → **OZ‑splitsing** → risico’s → Copilot
+</p>
 
 <!-- 1. PDF upload -->
 <div class="box">
@@ -38,14 +43,14 @@
   <h2>2. LV‑tekst</h2>
   <textarea id="lvtext" placeholder="LV‑tekst verschijnt hier..."></textarea>
   <br/>
-  <button class="secondary" onclick="splitPerPositie()">Splits per positie</button>
+  <button class="secondary" onclick="splitPerOZ()">✅ Splits per OZ</button>
 </div>
 
-<!-- 3. Risico per positie -->
+<!-- 3. Risico’s per OZ -->
 <div class="box">
-  <h2>3. Risico’s per positie</h2>
+  <h2>3. Risico’s per OZ</h2>
   <div id="riskOutput"></div>
-  <button class="secondary" onclick="detectRisksPerPositie()">Risico’s analyseren</button>
+  <button class="secondary" onclick="detectRisksPerOZ()">Risico’s analyseren</button>
 </div>
 
 <script>
@@ -69,11 +74,11 @@
         .getDocument(new Uint8Array(reader.result)).promise;
 
       let text = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
         const content = await page.getTextContent();
-        text += '\n=== PAGINA ' + i + ' ===\n' +
-                content.items.map(item => item.str).join(' ');
+        text += '\n=== PAGINA ' + p + ' ===\n' +
+                content.items.map(i => i.str).join(' ');
       }
       lvtext.value = text;
     };
@@ -81,41 +86,55 @@
     reader.readAsArrayBuffer(fileInput.files[0]);
   }
 
-  /* POSITIE SPLITSING (stabiel) */
-  function splitPerPositie() {
-    const regex = /(Pos\.?\s*\d+(?:\.\d+)*)\s*([\s\S]*?)(?=Pos\.?\s*\d+(?:\.\d+)*|$)/gi;
-    let result = '';
+  /*
+    ✅ OZ‑SPLITSING
+    Werkt met o.a.:
+    - OZ
+    - OZ. 1
+    - OZ 1.2
+    - OZ 1.02.003
+  */
+  function splitPerOZ() {
+    const text = lvtext.value;
+
+    const regex =
+      /(OZ\.?\s*\d*(?:\.\d+)*)\s*([\s\S]*?)(?=(?:\n|\r)*OZ\.?\s*\d*(?:\.\d+)*|$)/gi;
+
+    let output = '';
     let match;
 
-    while ((match = regex.exec(lvtext.value)) !== null) {
-      result += '\n--- ' + match[1] + ' ---\n' + match[2].trim() + '\n';
+    while ((match = regex.exec(text)) !== null) {
+      const oz = match[1].trim();
+      const inhoud = match[2].trim();
+      output += '\n--- ' + oz + ' ---\n' + inhoud + '\n';
     }
 
-    if (!result) {
-      alert('Geen posities gevonden');
+    if (!output.trim()) {
+      alert('❌ Geen OZ‑blokken gevonden. Controleer of “OZ” in de tekst staat.');
       return;
     }
 
-    lvtext.value = result.trim();
+    lvtext.value = output.trim();
   }
 
-  function detectRisksPerPositie() {
+  function detectRisksPerOZ() {
     riskOutput.innerHTML = '';
-    const blocks = lvtext.value.split(/---\s*Pos/).filter(Boolean);
+
+    const blocks = lvtext.value.split(/---\s*OZ/).filter(Boolean);
 
     blocks.forEach(block => {
       const lines = block.split('\n');
-      const pos = 'Pos' + lines[0];
+      const oz = 'OZ ' + lines[0].trim();
       const t = block.toLowerCase();
 
       let risks = [];
       let css = 'risk-green';
 
-      if (t.includes('freigabe') || t.includes('sonder')) {
-        risks.push('AG‑freigabe / Sonderpositie');
+      if (t.includes('afwijk') || t.includes('meerwerk')) {
+        risks.push('Afwijking / meerwerk risico');
         css = 'risk-red';
-      } else if (t.includes('statik') || t.includes('nachweis')) {
-        risks.push('Technische eisen / documentatie');
+      } else if (t.includes('keur') || t.includes('bewijs') || t.includes('berekening')) {
+        risks.push('Technische onderbouwing / bewijs');
         css = 'risk-orange';
       } else {
         risks.push('Geen bijzonder risico');
@@ -123,7 +142,7 @@
 
       const div = document.createElement('div');
       div.className = css;
-      div.innerHTML = `<strong>${pos}</strong><br>${risks.join('<br>')}`;
+      div.innerHTML = `<strong>${oz}</strong><br>${risks.join('<br>')}`;
       riskOutput.appendChild(div);
     });
   }
