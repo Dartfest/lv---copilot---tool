@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <title>LV – Planstraße analyse</title>
 
-<!-- ✅ PDF.js – CORRECTE SCRIPT TAG -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/min.js
+<!-- ✅ ENIGE EXTERNE DEPENDENCY -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3in.js
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -27,7 +27,7 @@ button {
   padding: 6px 12px;
   margin: 6px 0;
 }
-.block {
+.box {
   background: #ffffff;
   padding: 16px;
   border-radius: 6px;
@@ -48,23 +48,23 @@ button {
 
 <body>
 
-<h1>LV – Planstraße samenvatting & tijdvakken</h1>
+<h1>LV – Planstraße volgorde & tijdvakken</h1>
 
-<div class="block">
+<div class="box">
   <h2>1. LV lezen</h2>
   <input type="file" id="file" accept=".pdf"><br>
   <button onclick="leesLV()">Lees LV</button>
   <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
 
-<div class="block">
+<div class="box">
   <h2>2. Analyse</h2>
   <button onclick="analyse()">Analyseer Planstraßen</button>
   <div id="result"></div>
 </div>
 
 <script>
-/* ========= LV LEZEN (NOOIT FILTEREN) ========= */
+/* ========= LV LEZEN ========= */
 async function leesLV() {
   const f = document.getElementById("file").files[0];
   if (!f) {
@@ -88,7 +88,7 @@ async function leesLV() {
   document.getElementById("lvText").value = text;
 }
 
-/* ========= ANALYSE PLANSTRASSE + TIJD ========= */
+/* ========= ANALYSE ========= */
 function analyse() {
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("result");
@@ -99,10 +99,10 @@ function analyse() {
     return;
   }
 
-  // Planstraße / Planstrasse + PDF whitespace
+  // Planstraße / Planstrasse + PDF-spaties
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
 
-  // Veelvoorkomende LV‑tijdsvormen
+  // Meest voorkomende LV‑tijdvakken
   const periodeRegex =
     /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
      (\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(–|-|bis|t\/m)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
