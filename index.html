@@ -1,226 +1,138 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LV Copilot Tool – Risico’s met categorieën</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LV Copilot Tool – Werkvoorbereiding</title>
 
-  <!-- PDF.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
-  <style>
-    body { font-family: Arial, sans-serif; background:#f5f7fa; margin:0; padding:20px; }
-    h1,h2,h3 { margin-top:0; }
-
-    textarea {
-      width:100%;
-      min-height:180px;
-      padding:10px;
-      font-family:monospace;
-    }
-
-    button {
-      padding:8px 14px;
-      margin:6px 4px;
-      background:#2563eb;
-      color:white;
-      border:none;
-      border-radius:4px;
-      cursor:pointer;
-    }
-    button.secondary { background:#6b7280; }
-    button.readonly { background:#16a34a; }
-
-    .box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
-
-    .chunk {
-      border-radius:6px;
-      padding:10px;
-      margin-bottom:12px;
-    }
-    .red { background:#fee2e2; border-left:6px solid #dc2626; }
-    .orange { background:#ffedd5; border-left:6px solid #ea580c; }
-    .green { background:#dcfce7; border-left:6px solid #16a34a; }
-
-    .small { font-size:12px; color:#555; }
-  </style>
+<style>
+body { font-family: Arial, sans-serif; background:#f5f7fa; padding:20px; }
+h1,h2 { margin-top:0 }
+textarea { width:100%; min-height:180px; font-family:monospace; padding:10px; }
+button { padding:8px 14px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; margin:4px 0; }
+button.secondary { background:#6b7280; }
+.box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
+.chunk { padding:12px; border-radius:6px; margin-bottom:12px; }
+.red { background:#fee2e2; border-left:6px solid #dc2626; }
+.orange { background:#ffedd5; border-left:6px solid #ea580c; }
+.green { background:#dcfce7; border-left:6px solid #16a34a; }
+.small { font-size:12px; color:#555; }
+</style>
 </head>
+
 <body>
 
-<h1>LV Copilot Tool – Copilot‑delen met risicocategorieën</h1>
-<p class="small">
-LV → Copilot‑delen → risico + categorieën → export → uitvoerder read‑only
-</p>
+<h1>LV Copilot Tool – Werkvoorbereiding Infra</h1>
+<p class="small">LV → Copilot‑prompt → risico’s / knelpunten / bestellingen</p>
 
-<!-- 1. PDF upload -->
 <div class="box">
-  <h2>1. LV PDF upload</h2>
-  <input type="file" id="fileInput" accept=".pdf">
-  <button class="secondary" onclick="readPDF()">PDF lezen</button>
+<h2>1. LV PDF upload</h2>
+<input type="file" id="fileInput" accept=".pdf">
+<button class="secondary" onclick="readPDF()">PDF lezen</button>
 </div>
 
-<!-- 2. LV tekst -->
 <div class="box">
-  <h2>2. LV‑tekst</h2>
-  <textarea id="lvtext" placeholder="LV‑tekst verschijnt hier..."></textarea>
-  <br>
-  <button class="secondary" onclick="splitIntoChunks()">Splits in Copilot‑delen</button>
+<h2>2. LV‑tekst</h2>
+<textarea id="lvtext" placeholder="LV‑tekst verschijnt hier..."></textarea>
+<button class="secondary" onclick="splitIntoChunks()">Splits in Copilot‑delen</button>
 </div>
 
-<!-- 3. Copilot delen -->
 <div class="box">
-  <h2>3. Copilot‑delen (met risico & categorieën)</h2>
-  <div id="chunks"></div>
-</div>
-
-<!-- 4. Risico export -->
-<div class="box">
-  <h2>4. Risico‑overzicht</h2>
-  <button class="secondary" onclick="exportRisks()">Risico‑overzicht exporteren (TXT)</button>
-</div>
-
-<!-- 5. Uitvoerder -->
-<div class="box">
-  <h2>5. Uitvoerder‑modus</h2>
-  <p class="small">Alleen lezen – geen wijzigingen mogelijk</p>
-  <button class="readonly" onclick="activateReadonly()">Activeer read‑only</button>
+<h2>3. Copilot‑delen</h2>
+<div id="chunks"></div>
 </div>
 
 <script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  const fileInput = document.getElementById('fileInput');
-  const lvtext = document.getElementById('lvtext');
-  const chunksDiv = document.getElementById('chunks');
+const lvtext = document.getElementById("lvtext");
+const chunksDiv = document.getElementById("chunks");
 
-  let chunksData = [];
-
-  /* PDF lezen */
-  async function readPDF() {
-    if (!fileInput.files[0]) { alert('Geen PDF gekozen'); return; }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const pdf = await pdfjsLib.getDocument(new Uint8Array(reader.result)).promise;
-      let text = '';
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        text += '\n=== PAGINA ' + p + ' ===\n' +
-                content.items.map(i => i.str).join(' ');
-      }
-      lvtext.value = text;
-    };
-    reader.readAsArrayBuffer(fileInput.files[0]);
-  }
-
-  /* LV splitsen */
-  function splitIntoChunks() {
-    chunksDiv.innerHTML = '';
-    chunksData = [];
-
-    const MAX = 3600;
-    const parts = lvtext.value.match(new RegExp('[\\s\\S]{1,'+MAX+'}','g')) || [];
-
-    parts.forEach((part, i) => {
-      const risk = analyseRisk(part);
-
-      chunksData.push({
-        deel: i + 1,
-        niveau: risk.label,
-        categorieën: risk.categories
-      });
-
-      const div = document.createElement('div');
-      div.className = `chunk ${risk.class}`;
-      div.innerHTML = `
-        <strong>DEEL ${i+1}/${parts.length} – ${risk.label}</strong><br>
-        <em>Categorieën:</em> ${risk.categories.join(', ') || '–'}<br><br>
-        <pre style="white-space:pre-wrap;">${part}</pre>
-        <button onclick="copyChunk(${i})">Kopieer dit deel</button>
-      `;
-      chunksDiv.appendChild(div);
-    });
-  }
-
-  /* Risico + categorie analyse */
-  function analyseRisk(text) {
-    const t = text.toLowerCase();
-    let categories = [];
-    let level = 'green';
-    let label = 'LAAG RISICO';
-
-    if (t.includes('freigabe') || t.includes('vertrag') || t.includes('ag ')) {
-      categories.push('Contractueel');
-      level = 'red';
-      label = 'HOOG RISICO';
+async function readPDF() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) { alert("Geen PDF gekozen"); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const pdf = await pdfjsLib.getDocument(new Uint8Array(reader.result)).promise;
+    let text = "";
+    for (let i=1;i<=pdf.numPages;i++){
+      const page = await pdf.getPage(i);
+      const c = await page.getTextContent();
+      text += c.items.map(it=>it.str).join(" ") + "\n";
     }
-    if (t.includes('sonder') || t.includes('meerwerk') || t.includes('abweich')) {
-      categories.push('Meerwerk');
-      level = 'red';
-      label = 'HOOG RISICO';
-    }
-    if (t.includes('statik') || t.includes('nachweis') || t.includes('berekening')) {
-      categories.push('Technisch');
-      if (level !== 'red') {
-        level = 'orange';
-        label = 'MIDDEL RISICO';
-      }
-    }
-    if (t.includes('termijn') || t.includes('wachttijd') || t.includes('planning')) {
-      categories.push('Planning');
-      if (level === 'green') {
-        level = 'orange';
-        label = 'MIDDEL RISICO';
-      }
-    }
-    if (t.includes('keuring') || t.includes('kwaliteit')) {
-      categories.push('Kwaliteit');
-      if (level === 'green') {
-        level = 'orange';
-        label = 'MIDDEL RISICO';
-      }
-    }
+    lvtext.value = text;
+  };
+  reader.readAsArrayBuffer(file);
+}
 
-    return { class: level, label, categories };
-  }
+function splitIntoChunks(){
+  chunksDiv.innerHTML="";
+  const MAX=3500;
+  const parts = lvtext.value.match(new RegExp("[\\s\\S]{1,"+MAX+"}","g")) || [];
 
-  /* Kopieer Copilot deel */
-  function copyChunk(index) {
-    navigator.clipboard.writeText(
-      document.querySelectorAll('.chunk pre')[index].innerText
-    );
-    alert('Deel gekopieerd voor Copilot');
-  }
+  parts.forEach((part,i)=>{
+    const r = analyse(part);
 
-  /* Export risico overzicht */
-  function exportRisks() {
-    if (chunksData.length === 0) {
-      alert('Nog geen Copilot‑delen');
-      return;
-    }
+    const prompt =
+`ROL
+Jij bent mijn ZEER ERVAREN digitale werkvoorbereider voor Duitse en Nederlandse
+grond-, weg- en rioleringswerken (Tiefbau / Infra).
 
-    let output = 'RISICO-OVERZICHT LV\n\n';
-    chunksData.forEach(c => {
-      output += `DEEL ${c.deel}: ${c.niveau}\n`;
-      output += `Categorieën: ${c.categorieën.join(', ') || '–'}\n\n`;
-    });
+Gebruik ALTIJD deze structuur:
+1. Betekenis in normaal Nederlands
+2. Technische kern
+3. Uitvoering (praktijk)
+4. Werkvoorbereiding – calculatiefase
+5. Werkvoorbereiding – na gunning
+6. Risico’s, knelpunten en bestellingen
+   6A. Risico’s
+   6B. Knelpunten
+   6C. Bestellen & vastleggen
+7. Uitvoerder‑checklist
 
-    const blob = new Blob([output], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'risico-overzicht.txt';
-    a.click();
-  }
+REGELS
+- Geen aannames
+- Faalkosten‑gericht
+- Praktisch en uitvoerbaar
 
-  /* Read-only uitvoerder */
-  function activateReadonly() {
-    lvtext.readOnly = true;
-    document.querySelectorAll('button').forEach(b => {
-      if (!b.classList.contains('readonly')) b.disabled = true;
-    });
-    alert('Uitvoerder‑modus actief');
-  }
+LV‑DEEL
+${part}`;
+
+    const d=document.createElement("div");
+    d.className=`chunk ${r.level}`;
+    d.innerHTML=`
+<strong>DEEL ${i+1}/${parts.length}</strong><br>
+Risico’s: ${r.risico.join(", ")||"–"}<br>
+Knelpunten: ${r.knelpunt.join(", ")||"–"}<br>
+Bestellen: ${r.bestellen.join(", ")||"–"}<br><br>
+<pre style="white-space:pre-wrap">${part}</pre>
+<button onclick='navigator.clipboard.writeText(${JSON.stringify(prompt)})'>
+Kopieer Copilot‑prompt
+</button>`;
+    chunksDiv.appendChild(d);
+  });
+}
+
+function analyse(t){
+  t=t.toLowerCase();
+  const risico=[], knelpunt=[], bestellen=[];
+  let level="green";
+
+  if(t.includes("vertrag")||t.includes("freigabe")) risico.push("Contractueel");
+  if(t.includes("meerwerk")||t.includes("abweich")) risico.push("Meerwerk");
+  if(t.includes("prüfung")||t.includes("keuring")) knelpunt.push("Kwaliteit");
+  if(t.includes("verkehr")||t.includes("umleitung")) knelpunt.push("Logistiek");
+  if(t.includes("liefer")||t.includes("material")) bestellen.push("Materiaal");
+  if(t.includes("gerät")||t.includes("kran")) bestellen.push("Materieel");
+
+  if(risico.length>0) level="red";
+  else if(knelpunt.length>0) level="orange";
+
+  return { risico, knelpunt, bestellen, level };
+}
 </script>
 
 </body>
