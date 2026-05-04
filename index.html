@@ -2,30 +2,42 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV PDF Lezer – Werkend</title>
+<title>LV PDF Lezer – Definitieve Test</title>
 
-<!-- PDF.js – CORRECT -->
+<!-- ✅ PDF.js CORRECT geladen -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  window.addEventListener("load", () => {
+    if (!window.pdfjsLib) {
+      alert("pdf.js is NIET geladen – check internet/CDN");
+    } else {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      console.log("pdfjsLib OK");
+    }
+  });
 </script>
 
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; background:#f4f6f8; }
-.box { background:#fff; padding:16px; border-radius:6px; }
+body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
+.box { background:white; padding:16px; border-radius:6px; }
 textarea { width:100%; min-height:220px; font-family:monospace; }
-.status { margin-top:6px; font-size:13px; }
 button { padding:6px 12px; margin-top:6px; }
+.status { margin:6px 0; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h2>LV‑PDF lezen (test)</h2>
+<h2>LV‑PDF lezen (definitieve test)</h2>
 
 <div class="box">
-  <input type="file" id="lvFile" accept=".pdf">
-  <br>
-  <button onclick="readLV()">Lees LV</button>
+  <input type="file" id="pdfFile" accept=".pdf"><br>
+  <button onclick="leesPDF()">Lees LV</button>
+
   <div id="status" class="status"></div>
+  <textarea id="output" placeholder="LV‑tekst verschijnt hier..."></textarea>
+</div>
+
+<script>
+async function leesPDF() {
