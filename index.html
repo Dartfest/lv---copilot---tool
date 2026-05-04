@@ -1,81 +1,42 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8">
-<title>LV – Planstraße (stabiel)</title>
+  <meta charset="UTF-8">
+  <title>LV test</title>
 
-<!-- ✅ PDF.js CORRECT -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdfpt>
-<script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-</script>
-
-<style>
-body {
-  font-family: Arial, sans-serif;
-  background:#f4f6f8;
-  padding:20px;
-}
-textarea {
-  width:100%;
-  min-height:260px;
-  font-family:monospace;
-  white-space:pre-wrap;
-}
-button {
-  padding:6px 12px;
-  margin-top:6px;
-}
-.block {
-  background:#fff;
-  padding:16px;
-  border-radius:6px;
-  margin-bottom:16px;
-}
-.plan {
-  margin-top:8px;
-  padding:8px;
-  border-left:4px solid #2563eb;
-  background:#eff6ff;
-}
-.ok {
-  color:green;
-  font-weight:bold;
-}
-</style>
+  <!-- PDF.JS – CORRECTE SCRIPT TAG -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  </script>
 </head>
 
 <body>
 
-<h1>LV – Planstraße overzicht</h1>
-<p class="ok">✅ pdf.js is geladen</p>
+<h1>LV minimale test</h1>
 
-<div class="block">
-  <h2>1. LV lezen</h2>
-  <input type="file" id="file" accept=".pdf"><br>
-  <button onclick="leesLV()">Lees LV</button>
-  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
-</div>
+<p id="status">pagina geladen</p>
 
-<div class="block">
-  <h2>2. Gevonden Planstraßen</h2>
-  <button onclick="analyse()">Toon Planstraßen</button>
-  <div id="output"></div>
-</div>
+<input type="file" id="file" accept=".pdf">
+<button onclick="lees()">Lees LV</button>
+
+<pre id="output"></pre>
 
 <script>
-/* ===== LV LEZEN – GEEN FILTERS ===== */
-async function leesLV() {
+async function lees() {
   const f = document.getElementById("file").files[0];
-  if (!f) { alert("Kies eerst een PDF"); return; }
+  if (!f) {
+    alert("Kies een PDF");
+    return;
+  }
 
   const buf = await f.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
 
   let text = "";
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     for (const item of content.items) {
       text += item.str + "\n";
@@ -83,34 +44,7 @@ async function leesLV() {
     text += "\n";
   }
 
-  document.getElementById("lvText").value = text;
-}
-
-/* ===== PLANSTRASSE ZOEKEN ===== */
-function analyse() {
-  const text = document.getElementById("lvText").value;
-  const out = document.getElementById("output");
-  out.innerHTML = "";
-
-  if (!text.trim()) {
-    alert("Geen LV‑tekst gevonden");
-    return;
-  }
-
-  const regex = /Planstraße\s+[A-Z]/gi;
-  const found = new Set(text.match(regex) || []);
-
-  if (!found.size) {
-    out.innerHTML = "<p>Geen Planstraßen gevonden in LV.</p>";
-    return;
-  }
-
-  for (const p of found) {
-    const div = document.createElement("div");
-    div.className = "plan";
-    div.textContent = p;
-    out.appendChild(div);
-  }
+  document.getElementById("output").textContent = text;
 }
 </script>
 
