@@ -1,60 +1,19 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8">
-  <title>LV leestest</title>
+<meta charset="UTF-8">
+<title>TEST</title>
 
-  <!-- ✅ ECHTE script-tag, geen losse URL -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min>
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-  </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs174/pdf.min.js
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+</script>
 
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    textarea {
-      width: 100%;
-      min-height: 300px;
-      font-family: monospace;
-      white-space: pre-wrap;
-    }
-    button { padding: 6px 12px; margin-top: 10px; }
-  </style>
 </head>
-
 <body>
 
-<h1>LV leestest</h1>
-
-<input type="file" id="file" accept=".pdf"><br>
-<button onclick="leesLV()">Lees LV</button>
-
-<textarea id="output" placeholder="Hier moet LV-tekst komen..."></textarea>
-
-<script>
-async function leesLV() {
-  const f = document.getElementById("file").files[0];
-  if (!f) {
-    alert("Kies eerst een PDF");
-    return;
-  }
-
-  const buf = await f.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-
-  let text = "";
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    for (const item of content.items) {
-      text += item.str + "\n";
-    }
-    text += "\n";
-  }
-
-  document.getElementById("output").value = text || "[PDF bevat geen tekstlaag]";
-}
-</script>
+<h1>ALS JE DIT ZIET IS HTML OK</h1>
 
 </body>
 </html>
