@@ -2,9 +2,9 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV + K&L Werkvoorbereiding Tool</title>
+<title>LV + K&L Werkvoorbereiding Infra</title>
 
-<!-- ✅ PDF.js correct geladen -->
+<!-- PDF.js correct -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -14,15 +14,15 @@
 <style>
 body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
-h1,h2 { margin-top:0 }
+h1,h2,h3 { margin-top:0 }
 textarea { width:100%; min-height:180px; font-family:monospace; padding:10px; }
 button { padding:6px 12px; margin-top:6px; }
-.chunk { padding:12px; border-radius:6px; margin-top:12px; }
+.chunk { padding:14px; border-radius:6px; margin-top:16px; }
 .green { background:#dcfce7; border-left:6px solid #16a34a; }
 .orange { background:#ffedd5; border-left:6px solid #ea580c; }
 .red { background:#fee2e2; border-left:6px solid #dc2626; }
-.small { font-size:12px; color:#555; }
 pre { white-space:pre-wrap; background:#f9fafb; padding:10px; }
+ul { margin-left:18px; }
 </style>
 </head>
 
@@ -53,12 +53,10 @@ pre { white-space:pre-wrap; background:#f9fafb; padding:10px; }
 </div>
 
 <script>
-/* ===== PDF lezen ===== */
 async function readPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
   let text = "";
-
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const c = await page.getTextContent();
@@ -67,39 +65,29 @@ async function readPDF(file) {
   return text;
 }
 
-/* ===== LV ===== */
 async function readLV() {
   let t = "";
-  for (const f of lvFiles.files) {
-    t += await readPDF(f);
-  }
+  for (const f of lvFiles.files) t += await readPDF(f);
   lvText.value = t;
 }
 
-/* ===== K&L ===== */
 async function readKL() {
   let t = "";
   for (const f of klFiles.files) {
-    if (f.type === "application/pdf") {
-      t += await readPDF(f);
-    } else {
-      t += await f.text();
-    }
+    if (f.type === "application/pdf") t += await readPDF(f);
+    else t += await f.text();
   }
   klText.value = t.toLowerCase();
 }
 
-/* ===== Analyse LV ===== */
 function analyseLV() {
   output.innerHTML = "";
-
   const parts = lvText.value.match(/[\s\S]{1,3000}/g) || [];
   const kl = klText.value;
 
   parts.forEach((p, i) => {
     const t = (p + kl).toLowerCase();
 
-    /* Netten */
     const netten = [];
     if (t.includes("gas")) netten.push("Gas");
     if (t.includes("elektra")) netten.push("Elektra");
@@ -107,60 +95,48 @@ function analyseLV() {
     if (t.includes("telecom") || t.includes("glasvezel")) netten.push("Telecom");
     if (t.includes("riool")) netten.push("Riool");
 
-    /* Risico’s */
-    const risico = [];
-    if (t.includes("meerwerk") || t.includes("abweich"))
-      risico.push("Meerwerkpotentieel");
-    if (t.includes("voorwaarde") || t.includes("vertrag"))
-      risico.push("Contractueel risico");
-    if (netten.length >= 3)
-      risico.push("Veel K&L → onzekere situatie");
-
-    /* Knelpunten */
-    const knelpunt = [];
-    if (netten.length > 0)
-      knelpunt.push("Aanwezige kabels & leidingen");
-    if (netten.includes("Gas") || netten.includes("Elektra"))
-      knelpunt.push("Veiligheidszones → handmatig werken");
-    if (netten.length > 1)
-      knelpunt.push("Beperkte graafruimte → lage productie");
-    if (t.includes("verkehr") || t.includes("omleiding"))
-      knelpunt.push("Verkeersmaatregelen / fasering");
-
-    /* Bestellen */
-    const bestellen = [];
-    if (t.includes("materiaal") || t.includes("liefer"))
-      bestellen.push("Materialen");
-    if (t.includes("kraan") || t.includes("gerät"))
-      bestellen.push("Materieel");
-    if (t.includes("keuring") || t.includes("prüfung"))
-      bestellen.push("Keuringen");
-    if (netten.length > 0)
-      bestellen.push("Afstemming netbeheerders");
-
-    /* Impact */
-    let cls = "green", impact = "LAAG", fase = "Normale uitvoering";
+    let cls="green", impact="LAAG", conclusie="";
     if (netten.includes("Gas") || netten.includes("Elektra")) {
-      cls = "red"; impact = "HOOG"; fase = "Handmatig / gefaseerd";
-    } else if (netten.length > 1) {
-      cls = "orange"; impact = "MIDDEL"; fase = "Productiebeperking";
+      cls="red"; impact="HOOG";
+    } else if (netten.length>1) {
+      cls="orange"; impact="MIDDEL";
     }
+
+    conclusie =
+      netten.length===0
+      ? "Geen kabels en leidingen bekend die de uitvoering beperken."
+      : "Aanwezige kabels en leidingen bepalen de werkwijze. Handmatig werken, fasering en afstemming met netbeheerders zijn noodzakelijk. Productiesnelheid neemt af en meerwerkpotentieel is aanwezig.";
 
     const d = document.createElement("div");
     d.className = `chunk ${cls}`;
     d.innerHTML = `
-<strong>LV‑DEEL ${i+1}</strong><br>
-<strong>Kabels & leidingen:</strong> ${netten.join(", ") || "–"}<br>
-<strong>Impact:</strong> ${impact} – ${fase}<br><br>
+<h3>LV‑DEEL ${i+1}</h3>
 
-<strong>🔴 Risico’s</strong>
-${risico.length ? "<ul>" + risico.map(r => `<li>${r}</li>`).join("") + "</ul>" : "<p>–</p>"}
+<strong>Kabels & leidingen:</strong> ${netten.join(", ")||"–"}<br>
+<strong>Impact:</strong> ${impact}
 
-<strong>🟠 Knelpunten</strong>
-${knelpunt.length ? "<ul>" + knelpunt.map(k => `<li>${k}</li>`).join("") + "</ul>" : "<p>–</p>"}
+<h4>🔹 Voorbereidingsfase</h4>
+<ul>
+  <li>KLIC en aanvullende gegevens controleren</li>
+  <li>Netbeheerders tijdig informeren</li>
+  <li>Proefsleuven overwegen</li>
+</ul>
 
-<strong>🟢 Bestellen / vastleggen</strong>
-${bestellen.length ? "<ul>" + bestellen.map(b => `<li>${b}</li>`).join("") + "</ul>" : "<p>–</p>"}
+<h4>🔹 Uitvoeringsfase</h4>
+<ul>
+  <li>Handmatig graven waar vereist</li>
+  <li>Werken in korte vakken / fasering</li>
+  <li>Extra toezicht bij gas en elektra</li>
+</ul>
+
+<h4>🔹 Afronding / nazorg</h4>
+<ul>
+  <li>Herstel schade nabij kabels en leidingen</li>
+  <li>Oplevercontrole en documentatie</li>
+</ul>
+
+<h4>📌 Conclusie K&amp;L‑knelpunten</h4>
+<p>${conclusie}</p>
 
 <pre>${p}</pre>
 `;
@@ -171,4 +147,3 @@ ${bestellen.length ? "<ul>" + bestellen.map(b => `<li>${b}</li>`).join("") + "</
 
 </body>
 </html>
-``
