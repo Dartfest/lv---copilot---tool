@@ -1,90 +1,96 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8">
-<title>LV – Planstraße samenvatting & tijdvakken</title>
+  <meta charset="UTF-8">
+  <title>LV – Planstraße analyse</title>
 
-<!-- ✅ PDF.js correct -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-</script>
+  <!-- ✅ PDF.JS – CORRECT -->
+  <script src="https://cdnjs.cloudflares/pdf.js/3.11.174/pdf.min.js
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  </script>
 
-<style>
-body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
-textarea { width:100%; min-height:220px; font-family:monospace; white-space:pre-wrap; }
-button { padding:6px 12px; margin:6px 0; }
-.box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
-.plan {
-  border-left:4px solid #2563eb;
-  background:#eff6ff;
-  padding:10px;
-  margin:10px 0;
-}
-.small { color:#666; font-size:0.9em; }
-</style>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
+    textarea { width:100%; min-height:220px; font-family:monospace; white-space:pre-wrap; }
+    button { padding:6px 12px; margin:6px 0; }
+    .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
+    .plan {
+      border-left:4px solid #2563eb;
+      background:#eff6ff;
+      padding:10px;
+      margin:10px 0;
+    }
+    .muted { color:#666; font-size:0.9em; }
+  </style>
 </head>
 
 <body>
 
-<h1>LV – Planstraße samenvatting (uit LV)</h1>
+<h1>LV – Planstraße volgorde & tijdvakken</h1>
 
 <div class="box">
   <h2>1. LV lezen</h2>
   <input type="file" id="file" accept=".pdf"><br>
   <button onclick="leesLV()">Lees LV</button>
-  <textarea id="lvText"></textarea>
+  <textarea id="lvText" placeholder="LV-tekst verschijnt hier..."></textarea>
 </div>
 
 <div class="box">
-  <h2>2. Analyse & volgorde</h2>
+  <h2>2. Analyse</h2>
   <button onclick="analyse()">Analyseer Planstraßen</button>
   <div id="result"></div>
 </div>
 
 <script>
-/* ============ LV LEZEN ============ */
+/* ================= LV LEZEN ================= */
 async function leesLV() {
-  const f = file.files[0];
-  if (!f) return alert("Kies eerst een PDF");
+  const f = document.getElementById("file").files[0];
+  if (!f) { alert("Kies eerst een PDF"); return; }
 
   const buf = await f.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
 
-  let t = "";
+  let text = "";
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
-    const c = await page.getTextContent();
-    for (const i of c.items) t += i.str + "\n";
-    t += "\n";
+    const content = await page.getTextContent();
+    for (const item of content.items) {
+      text += item.str + "\n";
+    }
+    text += "\n";
   }
-  lvText.value = t;
+  document.getElementById("lvText").value = text;
 }
 
-/* ============ ANALYSE ============ */
+/* ================= ANALYSE ================= */
 function analyse() {
-  const text = lvText.value;
-  const out = result;
+  const text = document.getElementById("lvText").value;
+  const out = document.getElementById("result");
   out.innerHTML = "";
-  if (!text.trim()) return;
 
+  if (!text.trim()) {
+    out.textContent = "Geen LV-tekst aanwezig.";
+    return;
+  }
+
+  // Planstraße / Planstrasse + NBSP
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
 
+  // Tijdvakken (alle gebruikelijke LV-vormen)
   const periodeRegex =
     /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(–|-|bis|t\/m)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (KW\s*\d+\s*(–|-)\s*\d+)|
-     ((Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s*(bis\s*(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember))?\s*\d{4})/gi;
+     (\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(\-|–|bis|t\/m)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (KW\s*\d+\s*(\-|–)\s*\d+)/gi;
 
   const data = {};
-
   let m;
+
   while ((m = planRegex.exec(text)) !== null) {
     const key = "Planstraße " + m[2];
     if (!data[key]) data[key] = [];
+
     const frag = text.substring(m.index, m.index + 1500);
     let p;
     while ((p = periodeRegex.exec(frag)) !== null) {
@@ -92,15 +98,23 @@ function analyse() {
     }
   }
 
-  Object.keys(data).sort().forEach((k, i) => {
+  const keys = Object.keys(data).sort();
+  if (!keys.length) {
+    out.textContent = "Geen Planstraßen gevonden.";
+    return;
+  }
+
+  keys.forEach((k, i) => {
     const div = document.createElement("div");
     div.className = "plan";
-
-    const periodes = data[k].length
-      ? `<ul>${data[k].map(x => `<li>${x}</li>`).join("")}</ul>`
-      : `<p class="small">Geen expliciet tijdvak in LV gevonden</p>`;
-
-    div.innerHTML = `<strong>${i+1}. ${k}</strong>${periodes}`;
+    div.innerHTML = `
+      <strong>${i+1}. ${k}</strong>
+      ${
+        data[k].length
+          ? `<ul>${data[k].map(x => `<li>${x}</li>`).join("")}</ul>`
+          : `<p class="muted">Geen expliciet tijdvak in LV vermeld</p>`
+      }
+    `;
     out.appendChild(div);
   });
 }
@@ -108,4 +122,3 @@ function analyse() {
 
 </body>
 </html>
-``
