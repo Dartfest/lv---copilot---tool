@@ -2,45 +2,60 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV AI Contract Expert (VOB)</title>
+<title>LV Tender Engine v2</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:180px; }
-button { padding:8px 12px; margin:6px; }
+textarea { width:100%; height:150px; }
 
-.section { background:#fff; padding:15px; margin:10px 0; border-left:5px solid #2563eb; }
+.section {
+  background:#fff;
+  padding:15px;
+  margin:10px 0;
+  border-left:5px solid #2563eb;
+}
 
-.risk { color:#b91c1c; font-weight:bold; }
-.warn { color:#f59e0b; }
+.bar { height:18px; border-radius:4px; }
+.critical { background:#dc2626; }
+.normal { background:#2563eb; }
+
+.risk-high { color:#dc2626; font-weight:bold; }
+.risk-mid { color:#f59e0b; font-weight:bold; }
+.risk-low { color:#16a34a; font-weight:bold; }
+
+.grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
 </style>
 </head>
 
 <body>
 
-<h1>LV AI Contract Expert (VOB)</h1>
+<h1>LV Tender Engine v2</h1>
 
 <input type="file" id="file">
 <button onclick="leesLV()">Lees PDF</button>
 <button onclick="analyse()">Analyse</button>
+<button onclick="exportPDF()">Export PDF</button>
 
 <br><br>
-<label>API Key:</label>
-<input type="password" id="apiKey" placeholder="OpenAI API key">
+<label>API key (optioneel):</label>
+<input type="password" id="apiKey">
 
 <textarea id="lvText"></textarea>
 
-<div id="result"></div>
+<div id="dashboard"></div>
 
 <script>
 
-// ===== PDF =====
+// ================= PDF =================
 async function leesLV(){
   const f = document.getElementById("file").files[0];
-  if(!f) return alert("Kies PDF");
-
   const buffer = await f.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buffer}).promise;
 
@@ -54,100 +69,209 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== FALLBACK (zonder AI) =====
-function fallbackAnalyse(text){
-
-  let risico=[];
-
-  const t=text.toLowerCase();
-
-  if(t.includes("nicht vergütet"))
-    risico.push("Kosten niet vergoed (mogelijk §2 VOB/B risico)");
-
-  if(t.includes("nicht parallel"))
-    risico.push("Geen parallel werk → planning risico");
-
-  if(t.includes("drittfirmen"))
-    risico.push("Afhankelijkheid derden → §6 VOB/B risico");
-
-  return `
-  <h3>Fallback analyse (zonder AI)</h3>
-  <ul class="risk">${risico.map(r=>`<li>${r}</li>`).join("")}</ul>
-  `;
+// ================= FASES =================
+function fases(text){
+  let arr=[];
+  let r=/(\d+)\.\s*bauabschnitt/gi;
+  let m;
+  while((m=r.exec(text))){
+    arr.push({naam:"Fase "+m[1], predecessors:[]});
+  }
+  if(arr.length===0) arr.push({naam:"Project", predecessors:[]});
+  return arr;
 }
 
-// ===== AI ANALYSE =====
-async function aiAnalyse(text, apiKey){
+// ================= DEPENDENCIES =================
+function dependencies(text,f){
+  if(text.includes("nicht parallel") || text.includes("nach fertigstellung")){
+    for(let i=1;i<f.length;i++) f[i].predecessors.push(i-1);
+  }
+  return f;
+}
+
+// ================= DATUM =================
+const maandMap={
+  januar:0,februar:1,märz:2,april:3,mai:4,juni:5,
+  juli:6,august:7,september:8,oktober:9,november:10,dezember:11
+};
+
+function dates(text){
+  let r=/(juni|juli|august|mai|april|märz)\s+(20\d{2})/gi;
+  let d=[],m;
+  while((m=r.exec(text))){
+    d.push(new Date(m[2], maandMap[m[1]],1));
+  }
+  return d.sort((a,b)=>a-b);
+}
+
+// ================= CPM =================
+function cpm(f,d){
+
+  f.forEach((x,i)=>{
+    x.duur = (d[i]&&d[i+1]) ? (d[i+1]-d[i])/(1000*60*60*24) : 30;
+    x.ES=0; x.EF=0; x.LS=0; x.LF=0; x.slack=0;
+  });
+
+  f.forEach((x,i)=>{
+    if(x.predecessors.length){
+      x.ES=Math.max(...x.predecessors.map(p=>f[p].EF));
+    }
+    x.EF=x.ES+x.duur;
+  });
+
+  let total=Math.max(...f.map(x=>x.EF));
+
+  for(let i=f.length-1;i>=0;i--){
+    let x=f[i];
+    x.LF=total;
+    x.LS=x.LF-x.duur;
+    x.slack=x.LS-x.ES;
+  }
+
+  return {f,total};
+}
+
+// ================= RISICO =================
+function risicoScore(text){
+  let s=0;
+  if(text.includes("nicht vergütet")) s+=2;
+  if(text.includes("drittfirmen")) s+=2;
+  if(text.includes("unterbrechung")) s+=1;
+
+  if(s>=4) return ["HOOG","risk-high"];
+  if(s>=2) return ["MIDDEL","risk-mid"];
+  return ["LAAG","risk-low"];
+}
+
+// ================= CLAIMS =================
+function claims(text){
+  let c=[];
+  if(text.includes("drittfirmen"))
+    c.push("Vertraging derden → claimbaar");
+  if(text.includes("nicht vergütet"))
+    c.push("Niet vergoede posten → check meerwerk");
+  if(text.includes("unterbrechung"))
+    c.push("Onderbreking → mogelijk kostenclaim");
+  return c;
+}
+
+// ================= ACTIES =================
+function acties(text){
+  let a=[];
+  if(text.includes("drittfirmen"))
+    a.push("Afstemmen met nutsbedrijven");
+  if(text.includes("nicht parallel"))
+    a.push("Strikte fasering");
+  if(text.includes("unterbrechung"))
+    a.push("Kosten onderbreking berekenen");
+  return a;
+}
+
+// ================= AI =================
+async function aiAnalyse(text, key){
 
   const prompt = `
-Analyseer onderstaande LV tekst als juridisch expert conform VOB/B.
-
-BELANGRIJK:
-- Geen aannames maken
-- Alleen analyseren wat expliciet of logisch volgt uit tekst
-- Benoem onzekerheden expliciet
-
-STRUCTUUR:
-
-1. Samenvatting (uitgebreid)
-2. Contractanalyse (VOB):
-   - §2 Vergoeding / meerwerk
-   - §4 Uitvoering
-   - §6 Hinder / vertraging
-   - §8 Beëindiging (indien relevant)
-3. Risico's:
-   - contractueel
-   - planning
-   - uitvoering
-   - omgeving
-4. Aandachtspunten aannemer
-5. Conclusie
-
-TEKST:
-${text}
+Analyseer dit LV als senior werkvoorbereider.
+Geef:
+- samenvatting
+- grootste risico's
+- belangrijkste acties
 `;
 
   const res = await fetch("https://api.openai.com/v1/chat/completions",{
     method:"POST",
     headers:{
       "Content-Type":"application/json",
-      "Authorization":"Bearer " + apiKey
+      "Authorization":"Bearer "+key
     },
-    body: JSON.stringify({
+    body:JSON.stringify({
       model:"gpt-4o-mini",
-      messages:[{role:"user", content:prompt}],
-      temperature:0.2
+      messages:[{role:"user",content:prompt+"\n\n"+text}]
     })
   });
 
-  const data = await res.json();
-
+  const data=await res.json();
   return data.choices[0].message.content;
 }
 
-// ===== MAIN =====
+// ================= MAIN =================
 async function analyse(){
 
-  const text = document.getElementById("lvText").value;
-  const apiKey = document.getElementById("apiKey").value;
+  let t=document.getElementById("lvText").value.toLowerCase();
+  let key=document.getElementById("apiKey").value;
 
-  if(!apiKey){
-    document.getElementById("result").innerHTML = fallbackAnalyse(text);
-    return;
+  let f=dependencies(t,fases(t));
+  let d=dates(t);
+  let res=cpm(f,d);
+
+  let gantt="";
+  res.f.forEach(x=>{
+    let w=(x.duur/res.total)*100;
+    let l=(x.ES/res.total)*100;
+
+    gantt+=`
+    <div>
+      ${x.naam}
+      <div class="bar ${x.slack===0?'critical':'normal'}"
+           style="width:${w}%; margin-left:${l}%"></div>
+    </div>`;
+  });
+
+  let risico=risicoScore(t);
+  let claim=claims(t);
+  let actie=acties(t);
+
+  let aiText="";
+  if(key){
+    aiText = await aiAnalyse(t,key);
   }
 
-  document.getElementById("result").innerHTML = "AI analyse bezig...";
+  document.getElementById("dashboard").innerHTML=`
 
-  try{
-    const result = await aiAnalyse(text, apiKey);
+  <div class="section">
+    <h3>Planning</h3>
+    ${gantt}
+  </div>
 
-    document.getElementById("result").innerHTML = `
-    <div class="section">${result.replace(/\n/g,"<br>")}</div>
-    `;
+  <div class="grid">
 
-  }catch(e){
-    document.getElementById("result").innerHTML = "Fout bij AI analyse.";
-  }
+    <div class="section">
+      <h3>Risico</h3>
+      <p class="${risico[1]}">${risico[0]}</p>
+    </div>
+
+    <div class="section">
+      <h3>Kostenindicatie</h3>
+      <p>${risico[0]==="HOOG"?"€50k+":"€10k-50k"}</p>
+    </div>
+
+  </div>
+
+  <div class="section">
+    <h3>Claims</h3>
+    <ul>${claim.map(x=>`<li>${x}</li>`).join("")}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Acties</h3>
+    <ul>${actie.map(x=>`<li>${x}</li>`).join("")}</ul>
+  </div>
+
+  ${aiText?`<div class="section"><h3>AI Analyse</h3>${aiText}</div>`:""}
+
+  `;
+}
+
+// ================= PDF =================
+function exportPDF(){
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.text("LV Analyse v2",10,10);
+  doc.text(document.getElementById("dashboard").innerText,10,20);
+
+  doc.save("analyse.pdf");
 }
 
 </script>
