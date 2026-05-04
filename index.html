@@ -52,7 +52,7 @@ h3 { margin-top:0; }
 </div>
 
 <script>
-/* ===== PDF INLEZEN ===== */
+/* ================= PDF LEZEN ================= */
 async function readPDF(file){
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
@@ -73,60 +73,57 @@ async function readLV(){
   lvText.value = t;
 }
 
-/* ===== DATA ===== */
+/* ================= DATA ================= */
 let planData = {};
 
-const BUIS_REGEX = /(PVC|PE[\s-]?HD|PE\s?100|BETON|STAAL)([^.\n]{0,40}(DN\s?\d+|Ø\s?\d+|SDR\s?\d+|PN\s?\d+))?/i;
-const QTY_REGEX  = /(\d+[,\.]?\d*\s?(m|lfm|m²|m3))/i;
+const PLAN_REGEX = /Planstraße\s+([A-Z])/gi;
+const BUIS_REGEX = /(PVC|PE[\s-]?HD|PE\s?100|BETON|STAAL)(?:[^.\n]{0,40}(DN\s?\d+|Ø\s?\d+)(?:[^.\n]{0,20}(SDR\s?\d+|PN\s?\d+))?)?/i;
+const QTY_REGEX  = /(\d+[,\.]?\d*)\s?(m|lfm)/i;
 
-/* ===== ANALYSE ===== */
+/* ================= ANALYSE ================= */
 function analyse(){
   planData = {};
   output.innerHTML="";
+
   const text = lvText.value;
   if(!text.trim()){ alert("LV leeg"); return; }
 
-  const regex = /Planstraße\s+([A-Z])([^.\n]*)/gi;
   let m;
-
-  while((m = regex.exec(text)) !== null){
+  while((m = PLAN_REGEX.exec(text)) !== null){
     const letter = m[1];
     const key = `Planstraße ${letter}`;
     if(!planData[key]){
       planData[key] = {
-        sub:new Set(),
         uitvoering:new Set(),
         risico:new Set(),
-        materiaal:{} // { "PVC DN200": totaal }
+        materiaal:{} // buistype -> hoeveelheid
       };
     }
 
-    const frag = text.substring(m.index, m.index+700);
+    const frag = text.substring(m.index, m.index+800);
     const f = frag.toLowerCase();
 
-    if(/nord/.test(f)) planData[key].sub.add("Noord");
-    if(/süd|zuid/.test(f)) planData[key].sub.add("Zuid");
-    if(f.includes("bauabschnitt")) planData[key].uitvoering.add("Meerdere deelvakken");
+    if(f.includes("bauabschnitt")) planData[key].uitvoering.add("Uitvoering in meerdere deelvakken");
     if(f.includes("ohne unterbrechung")) planData[key].uitvoering.add("Zonder onderbreking uitvoeren");
-    if(f.includes("abweich")||f.includes("mehr")) planData[key].risico.add("Meerwerk / afwijking mogelijk");
+    if(f.includes("abweich")||f.includes("mehr")) planData[key].risico.add("Meerwerk / afwijkingen mogelijk");
 
     const qtyMatch = frag.match(QTY_REGEX);
     const buisMatch = frag.match(BUIS_REGEX);
 
     if(qtyMatch && buisMatch){
-      const qty = parseFloat(qtyMatch[1].replace(",","."));
-      const type = buisMatch[0].replace(/\s+/g," ").trim();
-      if(!planData[key].materiaal[type]) planData[key].materiaal[type]=0;
-      planData[key].materiaal[type]+=qty;
+      const hoeveelheid = parseFloat(qtyMatch[1].replace(",","."));
+      const buis = buisMatch[0].replace(/\s+/g," ").trim();
+      if(!planData[key].materiaal[buis]) planData[key].materiaal[buis]=0;
+      planData[key].materiaal[buis]+=hoeveelheid;
     }
   }
 
   render();
 }
 
-/* ===== RENDER ===== */
+/* ================= RENDER ================= */
 function render(){
-  Object.keys(planData).forEach(k=>{
+  Object.keys(planData).sort().forEach(k=>{
     const d=planData[k];
     const letter=k.slice(-1);
     const cls =
@@ -143,24 +140,22 @@ function render(){
     el.innerHTML=`
 <h3>${k}</h3>
 
-<strong>Subdelen:</strong> ${d.sub.size?[...d.sub].join(", "):"–"}<br>
+<strong>Werkvolgorde</strong>
+<ul>${d.uitvoering.size?[...d.uitvoering].map(x=>`<li>${x}</li>`).join(""):"<li>Geen specifieke volgorde benoemd</li>"}</ul>
 
-<strong>Werkvolgorde:</strong>
-<ul>${d.uitvoering.size?[...d.uitvoering].map(x=>`<li>${x}</li>`).join(""):"<li>Geen specifieke volgorde</li>"}</ul>
+<strong>Materiaalstaat</strong>
+<ul>${types.length?types.map(t=>`<li>${d.materiaal[t].toFixed(1)} m – ${t}</li>`).join(""):"<li>Geen buiswerk expliciet benoemd</li>"}</ul>
 
-<strong>Materiaalstaat:</strong>
-<ul>${types.length?types.map(t=>`<li>${d.materiaal[t].toFixed(1)} m – ${t}</li>`).join(""):"<li>Geen buismateriaal expliciet benoemd</li>"}</ul>
+${multi ? `<p class="warn">⚠ Meerdere buistypen in deze Planstraße</p>`:""}
 
-${multi ? `<p class="warn">⚠ Meerdere buistypen in deze straat</p>`:""}
-
-<strong>Risico’s:</strong>
+<strong>Risico’s</strong>
 <ul>${d.risico.size?[...d.risico].map(x=>`<li>${x}</li>`).join(""):"<li>Geen expliciete risico’s</li>"}</ul>
 `;
     output.appendChild(el);
   });
 }
 
-/* ===== PDF ===== */
+/* ================= PDF ================= */
 function exportPDF(){
   const {jsPDF}=window.jspdf;
   const pdf=new jsPDF();
@@ -171,7 +166,7 @@ function exportPDF(){
   y+=10;
   pdf.setFontSize(10);
 
-  Object.keys(planData).forEach(k=>{
+  Object.keys(planData).sort().forEach(k=>{
     const d=planData[k];
     const types=Object.keys(d.materiaal);
     const t=`
@@ -180,10 +175,10 @@ ${k}
 Werkvolgorde:
 - ${d.uitvoering.size?[...d.uitvoering].join("\n- "):"Geen"}
 
-Materiaal:
+Materiaalstaat:
 - ${types.length?types.map(x=>`${d.materiaal[x].toFixed(1)} m – ${x}`).join("\n- "):"Geen expliciet buismateriaal"}
 
-${types.length>1?"WAARSCHUWING: meerdere buistypen in deze straat":""}
+${types.length>1?"WAARSCHUWING: meerdere buistypen in deze Planstraße":""}
 
 Risico’s:
 - ${d.risico.size?[...d.risico].join("\n- "):"Geen"}
