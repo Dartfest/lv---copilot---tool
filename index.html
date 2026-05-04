@@ -2,15 +2,15 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Engine (Smart)</title>
+<title>Offline AI LV Analyse Tool</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:220px; font-family:monospace; }
-button { padding:8px 14px; margin:6px; }
+textarea { width:100%; height:180px; font-family:monospace; margin-bottom:10px; }
+button { padding:8px 14px; margin:6px 0; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .section { background:#fff; border-left:5px solid #2563eb; padding:15px; margin:10px 0; }
 .risk { color:#b91c1c; font-weight:bold; }
@@ -19,21 +19,33 @@ button { padding:8px 14px; margin:6px; }
 
 <body>
 
-<h1>LV Analyse Engine (Smart – zonder AI)</h1>
+<h1>Offline AI Tender Tool (LV Analyse)</h1>
 
 <div class="box">
+<h3>1. LV inladen</h3>
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
-<button onclick="analyse()">Analyse</button>
+<textarea id="lvText" placeholder="LV tekst komt hier..."></textarea>
+</div>
+
+<div class="box">
+<h3>2. Prompt genereren (voor ChatGPT)</h3>
+<button onclick="genPrompt()">Genereer AI Prompt</button>
+<textarea id="prompt"></textarea>
+</div>
+
+<div class="box">
+<h3>3. Plak ChatGPT resultaat</h3>
+<textarea id="aiResult" placeholder="Plak hier de AI analyse..."></textarea>
+<button onclick="verwerk()">Verwerk Analyse</button>
 <button onclick="exportPDF()">Export PDF</button>
-<textarea id="lvText"></textarea>
 </div>
 
 <div id="result"></div>
 
 <script>
 
-// ===== PDF =====
+// ===== PDF LEZEN =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -51,109 +63,55 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== HELPER =====
-function zinZoeken(text, woorden){
-  return woorden.some(w => text.includes(w));
-}
+// ===== PROMPT =====
+function genPrompt(){
 
-// ===== ANALYSE =====
-let analyseData = {};
+  const lv = document.getElementById("lvText").value;
 
-function analyse(){
+  const prompt = `
+Analyseer dit LV als senior werkvoorbereider en tender engineer.
 
-  const raw = document.getElementById("lvText").value;
-  const text = raw.toLowerCase();
+Geef een professioneel rapport met de volgende structuur:
 
-  // ===== SCOPE =====
-  let scope = [];
-  if(zinZoeken(text,["kanal"])) scope.push("riolering");
-  if(zinZoeken(text,["kabel","leitung"])) scope.push("kabels en leidingen");
-  if(zinZoeken(text,["straße"])) scope.push("infrastructuur en bouwwegen");
-  if(zinZoeken(text,["versorgung"])) scope.push("nutsvoorzieningen");
+1. Uitgebreide samenvatting (minimaal 3 alinea's)
+2. Scope van werkzaamheden
+3. Fasering en volgorde
+4. Planning en mijlpalen
+5. Contractanalyse:
+   - kostenverdeling
+   - risicoverdeling
+   - verplichtingen aannemer
+6. Afhankelijkheden en coördinatie
+7. Risicoanalyse (duidelijk gestructureerd):
+   - Planning
+   - Contract
+   - Uitvoering
+   - Omgeving
 
-  // ===== PLANNING =====
-  let planning = text.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+\d{4}/gi) || [];
+Schrijf concreet, professioneel en uitvoerbaar.
 
-  // ===== FASERING =====
-  let fases = [];
-  let faseRegex = /(\d+)\.\s*bauabschnitt/gi;
-  let m;
-  while((m=faseRegex.exec(text))){
-    fases.push("fase " + m[1]);
-  }
-
-  // ===== CONTRACT =====
-  let contract = [];
-  if(zinZoeken(text,["nicht vergütet"]))
-    contract.push("kosten worden niet apart vergoed");
-  if(zinZoeken(text,["einzuplanen"]))
-    contract.push("planning en inzet middelen ligt bij aannemer");
-  if(zinZoeken(text,["verbindlich"]))
-    contract.push("planning is bindend");
-  if(zinZoeken(text,["abstimmung"]))
-    contract.push("afstemming verplicht met opdrachtgever en derden");
-
-  // ===== BEPERKINGEN =====
-  let beperkingen = [];
-  if(zinZoeken(text,["nicht parallel"]))
-    beperkingen.push("geen parallel werk toegestaan");
-  if(zinZoeken(text,["ohne unterbrechung"]))
-    beperkingen.push("continu uitvoeren verplicht");
-
-  // ===== AFHANKELIJK =====
-  let afhankelijk = [];
-  if(zinZoeken(text,["drittfirmen","versorgung"]))
-    afhankelijk.push("nutsbedrijven / derden");
-
-  // ===== SAMENVATTING (LANG!) =====
-  let samenvatting = `
-  Het voorliggende bestek betreft een civieltechnisch project waarin werkzaamheden centraal staan zoals ${scope.join(", ") || "diverse infrastructurele werkzaamheden"}.
-
-  De uitvoering ${fases.length ? "is gefaseerd opgebouwd (" + fases.join(", ") + ")" : "kent geen expliciet benoemde fasering"}, wat betekent dat de volgorde van werkzaamheden een belangrijke rol speelt binnen de planning.
-
-  De planning bevat referenties naar ${planning.join(", ") || "geen expliciete tijdsperiodes"}, wat duidt op ${planning.length ? "een tijdsgebonden en mogelijk kritische uitvoeringsperiode" : "een globaal omschreven uitvoeringsduur"}.
-
-  Binnen het project gelden beperkingen zoals ${beperkingen.join(", ") || "beperkte expliciete beperkingen"}, waardoor de flexibiliteit in uitvoering wordt beperkt.
-
-  Daarnaast is er sprake van afhankelijkheden met betrekking tot ${afhankelijk.join(", ") || "beperkte externe partijen"}, wat inhoudt dat de voortgang mede wordt bepaald door derden en externe factoren.
-
-  Contractueel blijkt dat ${contract.length ? contract.join(", ") : "de aannemer een belangrijke verantwoordelijkheid draagt"}, waarbij risico’s op het gebied van planning, kosten en uitvoering grotendeels bij de aannemer liggen.
-
-  De combinatie van deze factoren maakt dat het project een hoge mate van coördinatie, planning en beheersing vereist. De uitvoeringsstrategie zal gericht moeten zijn op het minimaliseren van verstoringen en het effectief omgaan met afhankelijkheden en beperkingen.
+LV:
+${lv}
   `;
 
-  // ===== RISICO =====
-  let risico = [];
+  document.getElementById("prompt").value = prompt;
+}
 
-  if(beperkingen.length)
-    risico.push("beperkingen verhogen planningsdruk en verminderen flexibiliteit");
+// ===== VERWERKEN =====
+let rapportTekst = "";
 
-  if(afhankelijk.length)
-    risico.push("afhankelijkheid van derden kan leiden tot vertraging");
+function verwerk(){
 
-  if(contract.length)
-    risico.push("contractuele risico’s liggen grotendeels bij aannemer");
+  const ai = document.getElementById("aiResult").value;
 
-  if(planning.length > 2)
-    risico.push("lange doorlooptijd verhoogt kans op verstoringen");
+  if(!ai) return alert("Plak eerst AI analyse");
 
-  if(risico.length === 0)
-    risico.push("algemene uitvoeringsrisico’s aanwezig");
+  rapportTekst = ai;
 
-  analyseData = { samenvatting, risico };
-
-  // ===== OUTPUT =====
   document.getElementById("result").innerHTML = `
   <div class="section">
-    <h3>Uitgebreide samenvatting</h3>
-    <p>${samenvatting}</p>
-  </div>
-
-  <div class="section">
-    <h3>Risico's</h3>
-    <ul class="risk">
-    ${risico.map(r=>`<li>${r}</li>`).join("")}
-    </ul>
+    <h3>Analyse Rapport</h3>
+    <pre style="white-space:pre-wrap;">${ai}</pre>
   </div>
   `;
 }
@@ -161,22 +119,27 @@ function analyse(){
 // ===== PDF =====
 function exportPDF(){
 
+  if(!rapportTekst){
+    alert("Geen analyse beschikbaar");
+    return;
+  }
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
   let y=15;
+  const lines = doc.splitTextToSize(rapportTekst,180);
 
-  const lines = doc.splitTextToSize(analyseData.samenvatting,180);
-  doc.text(lines,10,y);
-  y += lines.length*5 + 10;
-
-  doc.setTextColor(200,0,0);
-  analyseData.risico.forEach(r=>{
-    doc.text("- "+r,10,y);
+  lines.forEach(line=>{
+    if(y > 280){
+      doc.addPage();
+      y=15;
+    }
+    doc.text(line,10,y);
     y+=5;
   });
 
-  doc.save("LV_Analyse_Smart.pdf");
+  doc.save("LV_AI_Rapport.pdf");
 }
 
 </script>
