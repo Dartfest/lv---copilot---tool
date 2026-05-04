@@ -5,7 +5,10 @@
   <title>LV – Planstraße samenvatting</title>
 
   <!-- pdf.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js   body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
     textarea { width:100%; height:260px; font-family:monospace; white-space:pre-wrap; }
     button { padding:6px 12px; margin:6px 0; }
     .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
@@ -70,18 +73,11 @@ function analyse() {
   const out = document.getElementById("result");
   out.innerHTML = "";
 
-  if (!text.trim()) {
-    out.textContent = "Geen LV-tekst beschikbaar.";
-    return;
-  }
-
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
-
-  const exactPeriodeRegex =
+  const exactRegex =
     /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(bis|–|-|t\/m)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
-
-  const tekstPeriodeRegex =
-    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|KW\s*\d+\s*(–|-)\s*\d+|(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s*\d{4})/gi;
+  const tekstRegex =
+    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|KW\s*\d+\s*(–|-)\s*\d+)/gi;
 
   const data = {};
   let m;
@@ -90,10 +86,10 @@ function analyse() {
     const plan = "Planstraße " + m[2];
     if (!data[plan]) data[plan] = { periodes: [], start: null, end: null };
 
-    const frag = text.substring(m.index, m.index + 1500);
+    const frag = text.slice(m.index, m.index + 1500);
     let p;
 
-    while ((p = exactPeriodeRegex.exec(frag)) !== null) {
+    while ((p = exactRegex.exec(frag))) {
       data[plan].periodes.push(p[0]);
       const s = parseDate(p[1]);
       const e = parseDate(p[3]);
@@ -101,34 +97,24 @@ function analyse() {
       if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
     }
 
-    while ((p = tekstPeriodeRegex.exec(frag)) !== null) {
+    while ((p = tekstRegex.exec(frag))) {
       if (!data[plan].periodes.includes(p[0])) {
         data[plan].periodes.push(p[0]);
       }
     }
   }
 
-  const plans = Object.keys(data).sort((a,b) => {
-    if (!data[a].start && !data[b].start) return a.localeCompare(b);
-    if (!data[a].start) return 1;
-    if (!data[b].start) return -1;
-    return data[a].start - data[b].start;
-  });
-
-  plans.forEach((p,i) => {
-    const d = data[p];
+  Object.entries(data).forEach(([p,d], i) => {
     const div = document.createElement("div");
     div.className = "plan";
-
-    const periode =
-      d.start && d.end
-        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
-        : `<p class="muted">Geen exact datum-tijdvak in LV vermeld</p>`;
-
     div.innerHTML = `
       <strong>${i+1}. ${p}</strong>
-      ${periode}
-      ${d.periodes.length ? `<ul>${d.periodes.map(x => `<li>${x}</li>`).join("")}</ul>` : ""}
+      ${
+        d.start && d.end
+        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
+        : `<p class="muted">Geen exact datum‑tijdvak in LV vermeld</p>`
+      }
+      <ul>${d.periodes.map(x => `<li>${x}</li>`).join("")}</ul>
     `;
     out.appendChild(div);
   });
