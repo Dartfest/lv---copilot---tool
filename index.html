@@ -67,30 +67,71 @@ const maandMap = {
   "oktober":9,"november":10,"dezember":11
 };
 
-// ================= VERBETERDE VERTALING =================
+// ================= SLIMME VERTALING =================
 function vertaal(t){
 
+  let r = t.toLowerCase();
+
+  // ---- woordniveau ----
   const dict = {
-    "Herstellung":"aanleg",
-    "Rückbau":"sloop",
-    "Abbruch":"sloop",
-    "Arbeiten":"werkzaamheden",
-    "Kanal":"riolering",
-    "Kabel":"kabels",
-    "Leitung":"leidingen",
-    "Bau":"bouw",
-    "Straße":"straat",
-    "Erschließung":"bouwrijp maken",
-    "Versorgung":"voorzieningen",
-    "Entwässerung":"afwatering"
+    "rückbau":"sloop",
+    "abbruch":"sloop",
+    "herstellung":"aanleg",
+    "arbeiten":"werkzaamheden",
+    "arbeit":"werkzaamheden",
+
+    "kanal":"riolering",
+    "kabel":"kabels",
+    "leitung":"leidingen",
+    "leitungen":"leidingen",
+
+    "baumaßnahmen":"bouwwerkzaamheden",
+    "baumaßnahme":"bouwwerk",
+    "baufeld":"bouwveld",
+    "baufeldes":"bouwveld",
+
+    "straße":"straat",
+    "planstraße":"planstraat",
+
+    "erschließung":"bouwrijp maken",
+    "versorgung":"voorzieningen",
+    "entwässerung":"afwatering",
+
+    "ausführung":"uitvoering",
+    "bauablauf":"bouwplanning",
+    "bauzeit":"bouwtijd",
+    "bauzeiten":"bouwtijden",
+
+    "bauabschnitt":"bouwfase",
+    "abschnitt":"fase"
   };
 
-  let r = t;
-
   Object.keys(dict).forEach(k=>{
-    const regex = new RegExp(k, "gi");
+    const regex = new RegExp("\\b" + k + "\\b", "gi");
     r = r.replace(regex, dict[k]);
   });
+
+  // ---- zinsniveau (dit maakt het verschil) ----
+  r = r.replace(/die werkzaamheden (.*?) müssen (.*?) werden/gi,
+    "de werkzaamheden $1 moeten $2 worden");
+
+  r = r.replace(/müssen darauf abgestimmt werden/gi,
+    "moeten hierop worden afgestemd");
+
+  r = r.replace(/sind hierbei zu berücksichtigen/gi,
+    "moeten hierbij worden meegenomen");
+
+  r = r.replace(/für den bauablauf werden folgende/gi,
+    "voor de bouwplanning gelden de volgende");
+
+  r = r.replace(/ist zu beginnen/gi,
+    "moet worden gestart");
+
+  r = r.replace(/spätestens/gi,
+    "uiterlijk");
+
+  // eerste letter hoofdletter maken
+  r = r.charAt(0).toUpperCase() + r.slice(1);
 
   return r;
 }
@@ -179,7 +220,6 @@ function analyse(){
 
     let d;
 
-    // exacte datums
     while((d=exactRegex.exec(frag))){
       const s=parseDate(d[1]);
       const e=parseDate(d[2]);
@@ -192,7 +232,6 @@ function analyse(){
       }
     }
 
-    // maand datums
     let mm;
     let tempStart=null;
 
@@ -217,13 +256,11 @@ function analyse(){
       }
     }
 
-    // samenvatting
     samenvatting(frag).forEach(s=>{
       if(!data[plan].sam.includes(s)) data[plan].sam.push(s);
     });
   }
 
-  // ================= OUTPUT =================
   Object.entries(data).forEach(([plan,d],i)=>{
 
     d.tijd = mergeTijd(d.tijd);
