@@ -13,6 +13,8 @@ button { padding:8px 14px; margin:8px 0; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .plan { background:#eef6ff; border-left:4px solid #2563eb; padding:10px; margin:10px 0; }
 .muted { color:#666; font-size:0.9em; }
+.fase { background:#f1f5f9; padding:8px; margin:6px 0; border-radius:4px; }
+.gap { background:#fff4e5; padding:6px; margin:4px 0; border-radius:4px; }
 </style>
 </head>
 
@@ -97,12 +99,51 @@ function risico(d){
 
   if(d.tijd.length>1) r.push("Meerdere fasen (let op overlap)");
   if(!d.end) r.push("Geen einddatum");
+
   if(d.start && d.end){
     let days=(d.end-d.start)/(1000*60*60*24);
     if(days<7) r.push("Zeer korte periode");
   }
 
   return r.length? r:["Geen bijzonderheden"];
+}
+
+// ================= MERGE =================
+function mergeTijd(tijd){
+  if(!tijd.length) return [];
+
+  tijd.sort((a,b)=>a.start-b.start);
+  let merged=[tijd[0]];
+
+  for(let i=1;i<tijd.length;i++){
+    let last=merged[merged.length-1];
+    let cur=tijd[i];
+
+    if(cur.start <= last.end){
+      last.end = new Date(Math.max(last.end, cur.end));
+    } else {
+      merged.push(cur);
+    }
+  }
+
+  return merged;
+}
+
+// ================= GAPS =================
+function berekenGaten(tijd){
+  let gaps=[];
+  for(let i=1;i<tijd.length;i++){
+    const prev=tijd[i-1];
+    const cur=tijd[i];
+
+    if(cur.start > prev.end){
+      gaps.push({
+        start: prev.end,
+        end: cur.start
+      });
+    }
+  }
+  return gaps;
 }
 
 // ================= ANALYSE =================
@@ -113,9 +154,7 @@ function analyse(){
   out.innerHTML="";
 
   const planRegex = /Planstra(ß|ss)e[\s]+([A-Z])/gi;
-
   const exactRegex = /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}).*?(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
-
   const maandRegex = /(im|bis)\s+(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(\d{4})/gi;
 
   let data={};
@@ -131,7 +170,7 @@ function analyse(){
 
     let d;
 
-    // ---- exacte datums ----
+    // exacte datums
     while((d=exactRegex.exec(frag))){
       const s=parseDate(d[1]);
       const e=parseDate(d[2]);
@@ -144,7 +183,7 @@ function analyse(){
       }
     }
 
-    // ---- maand datums ----
+    // maand datums
     let mm;
     let tempStart=null;
 
@@ -169,7 +208,7 @@ function analyse(){
       }
     }
 
-    // ---- samenvatting ----
+    // samenvatting
     samenvatting(frag).forEach(s=>{
       if(!data[plan].sam.includes(s)) data[plan].sam.push(s);
     });
@@ -178,7 +217,8 @@ function analyse(){
   // ================= OUTPUT =================
   Object.entries(data).forEach(([plan,d],i)=>{
 
-    d.tijd.sort((a,b)=>a.start-b.start);
+    d.tijd = mergeTijd(d.tijd);
+    const gaps = berekenGaten(d.tijd);
 
     const div=document.createElement("div");
     div.className="plan";
@@ -192,10 +232,24 @@ function analyse(){
       : `<p class="muted">Geen volledige periode</p>`
     }
 
-    <b>Tijdlijn:</b>
-    <ul>
-    ${d.tijd.map(t=>`<li>${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}</li>`).join("")}
-    </ul>
+    <b>Fasen:</b>
+    ${d.tijd.map((t,i)=>`
+      <div class="fase">
+        <b>Fase ${i+1}</b><br>
+        ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
+      </div>
+    `).join("")}
+
+    <b>Onderbrekingen:</b>
+    ${
+      gaps.length
+      ? gaps.map(g=>`
+        <div class="gap">
+          ${g.start.toLocaleDateString()} → ${g.end.toLocaleDateString()}
+        </div>
+      `).join("")
+      : `<div class="muted">Geen</div>`
+    }
 
     <b>Werkzaamheden:</b>
     <ul>
