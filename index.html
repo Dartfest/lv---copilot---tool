@@ -2,36 +2,51 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Engine PRO (Offline)</title>
+<title>LV Analyse Tool (ChatGPT Workflow)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:200px; }
-button { padding:8px 14px; margin:6px; }
+textarea { width:100%; height:140px; margin-bottom:10px; }
+button { padding:6px 10px; margin:4px; cursor:pointer; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
-.section { background:#fff; border-left:5px solid #2563eb; padding:15px; margin:10px 0; }
-.risk { color:#b91c1c; font-weight:bold; }
+.chunk { border:1px solid #ddd; padding:10px; margin-bottom:10px; border-radius:6px; }
+h3 { margin-top:0; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse Engine (Offline PRO)</h1>
+<h1>LV Analyse Tool (Gratis ChatGPT workflow)</h1>
 
 <div class="box">
+<h3>1. LV laden</h3>
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
-<button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
-<textarea id="lvText"></textarea>
+<textarea id="lvText" placeholder="LV tekst verschijnt hier..."></textarea>
 </div>
 
-<div id="result"></div>
+<div class="box">
+<h3>2. LV splitsen (voor ChatGPT limiet)</h3>
+<button onclick="splitLV()">Split LV</button>
+<div id="chunks"></div>
+</div>
+
+<div class="box">
+<h3>3. Eindanalyse</h3>
+<button onclick="genFinal()">Genereer eindprompt</button>
+<button onclick="copyFinal()">Kopieer eindprompt</button>
+<button onclick="openChatGPT()">Open ChatGPT</button>
+<textarea id="finalPrompt"></textarea>
+</div>
 
 <script>
+
+// ===== OPEN CHATGPT =====
+function openChatGPT(){
+  window.open("https://chat.openai.com", "_blank");
+}
 
 // ===== PDF =====
 async function leesLV(){
@@ -51,148 +66,101 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== ANALYSE =====
-let analyseData = {};
+// ===== SPLIT =====
+let parts = [];
 
-function analyse(){
+function splitLV(){
 
-  const raw = document.getElementById("lvText").value;
-  const text = raw.toLowerCase();
+  const text = document.getElementById("lvText").value;
+  const size = 2500;
 
-  // ===== FASERING =====
-  let fases = [];
-  let faseRegex = /(\d+)\.\s*bauabschnitt/gi;
-  let m;
-  while((m=faseRegex.exec(text))){
-    fases.push("Fase " + m[1]);
+  parts = [];
+  for(let i=0;i<text.length;i+=size){
+    parts.push(text.substring(i,i+size));
   }
 
-  // ===== PLANNING =====
-  let planning = text.match(/(januar|februar|märz|april|mai|juni|juli|august)\s+\d{4}/gi) || [];
+  const container = document.getElementById("chunks");
+  container.innerHTML = "";
 
-  // ===== SCOPE =====
-  let scope = [];
-  if(text.includes("kanal")) scope.push("riolering");
-  if(text.includes("kabel") || text.includes("leitung")) scope.push("kabels en leidingen");
-  if(text.includes("straße")) scope.push("infrastructuur");
+  parts.forEach((p,i)=>{
 
-  // ===== CONTRACT =====
-  let contract = [];
+    const prompt = `
+Analyseer dit deel van een LV als senior werkvoorbereider:
 
-  if(text.includes("nicht vergütet"))
-    contract.push("extra kosten worden niet vergoed");
+- samenvatting
+- werkzaamheden
+- planning
+- risico's
 
-  if(text.includes("einzuplanen"))
-    contract.push("planning en inzet ligt bij aannemer");
+${p}
+    `;
 
-  if(text.includes("verbindlich"))
-    contract.push("planning is bindend");
+    const encoded = encodeURIComponent(prompt);
+    const link = "https://chat.openai.com/?q=" + encoded;
 
-  if(text.includes("abstimmung"))
-    contract.push("coördinatieplicht met derden");
+    container.innerHTML += `
+    <div class="chunk">
+      <b>Deel ${i+1}</b><br>
 
-  // ===== AFHANKELIJK =====
-  let afhankelijk = [];
-  if(text.includes("drittfirmen"))
-    afhankelijk.push("nutsbedrijven");
+      <button onclick="copyChunk(${i})">Kopieer</button>
+      <button onclick="openChunk(${i})">Open in ChatGPT</button>
 
-  // ===== BEPERKING =====
-  let beperkingen = [];
-  if(text.includes("nicht parallel"))
-    beperkingen.push("geen parallel werk");
-  if(text.includes("ohne unterbrechung"))
-    beperkingen.push("continue uitvoering");
-
-  // ===== RISICO =====
-  let risico = {
-    planning: [],
-    contract: [],
-    uitvoering: [],
-    omgeving: []
-  };
-
-  if(beperkingen.length)
-    risico.planning.push("beperkingen zorgen voor planningsdruk");
-
-  if(planning.length > 2)
-    risico.planning.push("lange looptijd verhoogt risico");
-
-  if(contract.length)
-    risico.contract.push("risico’s liggen bij aannemer");
-
-  if(contract.some(c=>c.includes("niet")))
-    risico.contract.push("kostenrisico aanwezig");
-
-  if(afhankelijk.length)
-    risico.omgeving.push("afhankelijk van derden");
-
-  if(beperkingen.includes("geen parallel werk"))
-    risico.uitvoering.push("fasering verlengt uitvoering");
-
-  // ===== SAMENVATTING =====
-  let samenvatting = `
-  Het project omvat werkzaamheden zoals ${scope.join(", ") || "civiele werkzaamheden"}.
-
-  De uitvoering ${fases.length ? "is gefaseerd (" + fases.join(", ") + ")" : "heeft geen duidelijke fasering"}.
-
-  De planning bevat ${planning.join(", ") || "geen expliciete tijdsaanduiding"}.
-
-  Beperkingen zoals ${beperkingen.join(", ") || "beperkt"} beïnvloeden de uitvoeringsstrategie.
-
-  Contractueel geldt dat ${contract.join(", ") || "verantwoordelijkheid bij aannemer ligt"}.
-
-  Dit project vereist strakke planning, coördinatie en risicobeheersing.
-  `;
-
-  analyseData = { samenvatting, risico };
-
-  // ===== OUTPUT =====
-  document.getElementById("result").innerHTML = `
-  <div class="section">
-    <h3>Samenvatting</h3>
-    <p>${samenvatting}</p>
-  </div>
-
-  <div class="section">
-    <h3>Risico Analyse</h3>
-
-    <b>Planning</b>
-    <ul class="risk">${risico.planning.map(r=>`<li>${r}</li>`).join("")}</ul>
-
-    <b>Contract</b>
-    <ul class="risk">${risico.contract.map(r=>`<li>${r}</li>`).join("")}</ul>
-
-    <b>Uitvoering</b>
-    <ul class="risk">${risico.uitvoering.map(r=>`<li>${r}</li>`).join("")}</ul>
-
-    <b>Omgeving</b>
-    <ul class="risk">${risico.omgeving.map(r=>`<li>${r}</li>`).join("")}</ul>
-
-  </div>
-  `;
+      <textarea id="chunk${i}">${prompt}</textarea>
+    </div>`;
+  });
 }
 
-// ===== PDF =====
-function exportPDF(){
+// ===== COPY =====
+function copyChunk(i){
+  const t = document.getElementById("chunk"+i);
+  t.select();
+  document.execCommand("copy");
+  alert("Gekopieerd!");
+}
 
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+// ===== OPEN DIRECT =====
+function openChunk(i){
+  const text = document.getElementById("chunk"+i).value;
+  const encoded = encodeURIComponent(text);
+  const url = "https://chat.openai.com/?q=" + encoded;
+  window.open(url, "_blank");
+}
 
-  let y=15;
-  const lines = doc.splitTextToSize(analyseData.samenvatting,180);
+// ===== FINAL PROMPT =====
+function genFinal(){
 
-  doc.text(lines,10,y);
-  y += lines.length*5 + 10;
+  const prompt = `
+Gebruik onderstaande deelanalyses en maak één complete professionele LV analyse.
 
-  doc.setTextColor(200,0,0);
-  Object.values(analyseData.risico).forEach(arr=>{
-    arr.forEach(r=>{
-      doc.text("- "+r,10,y);
-      y+=5;
-    });
-  });
+Structuur:
 
-  doc.save("LV_Analyse_Offline.pdf");
+1. Uitgebreide samenvatting (minimaal 3 alinea's)
+2. Scope werkzaamheden
+3. Fasering
+4. Planning totaal
+5. Contractanalyse:
+   - kostenverdeling
+   - risicoverdeling
+   - verplichtingen aannemer
+6. Afhankelijkheden
+7. Risico's:
+   - planning
+   - contract
+   - uitvoering
+   - omgeving
+
+Plak hieronder alle deelanalyses:
+`;
+
+  document.getElementById("finalPrompt").value = prompt;
+}
+
+// ===== COPY FINAL =====
+function copyFinal(){
+  const t = document.getElementById("finalPrompt");
+  t.select();
+  document.execCommand("copy");
+  alert("Eindprompt gekopieerd!");
 }
 
 </script>
