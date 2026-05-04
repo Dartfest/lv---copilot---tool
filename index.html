@@ -2,38 +2,30 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Tender Engine PRO</title>
+<title>LV AI Contract Expert</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:160px; }
+textarea { width:100%; height:180px; }
 button { padding:8px 12px; margin:6px; }
 
 .section { background:#fff; padding:15px; margin:10px 0; border-left:5px solid #2563eb; }
 
-.bar { height:20px; border-radius:4px; }
-.critical { background:#b91c1c; }
-.normal { background:#2563eb; }
-
-.risk-high { color:#b91c1c; font-weight:bold; }
-.risk-mid { color:#f59e0b; font-weight:bold; }
-.risk-low { color:#15803d; font-weight:bold; }
-
-.row { margin:10px 0; }
+.risk { color:#b91c1c; font-weight:bold; }
+.fact { color:#111; }
+.warn { color:#f59e0b; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Tender Engine PRO</h1>
+<h1>LV AI Contract Expert</h1>
 
 <input type="file" id="file">
 <button onclick="leesLV()">Lees PDF</button>
 <button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
 
 <textarea id="lvText"></textarea>
 
@@ -44,8 +36,6 @@ button { padding:8px 12px; margin:6px; }
 // ===== PDF =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
-  if(!f) return alert("Kies PDF");
-
   const buffer = await f.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buffer}).promise;
 
@@ -59,216 +49,119 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== FASES =====
-function extractFases(text){
-  let fases=[];
-  let regex = /(\d+)\.\s*bauabschnitt/gi;
-  let m;
+// ===== CONTRACT EXPERT =====
+function contractExpert(text){
 
-  while((m=regex.exec(text))){
-    fases.push({ naam:"Fase "+m[1], predecessors:[] });
+  let feiten=[];
+  let interpretaties=[];
+  let risico={
+    contract:[],
+    planning:[],
+    uitvoering:[],
+    omgeving:[]
+  };
+
+  const t = text.toLowerCase();
+
+  // ===== FEITEN =====
+  if(t.includes("nicht vergütet")){
+    feiten.push("Kosten worden niet apart vergoed.");
+    risico.contract.push("Kostenrisico bij aannemer.");
   }
 
-  if(fases.length===0)
-    fases.push({ naam:"Project", predecessors:[] });
-
-  return fases;
-}
-
-// ===== DEPENDENCIES =====
-function parseDependencies(text, fases){
-
-  if(text.includes("nicht parallel")){
-    for(let i=1;i<fases.length;i++){
-      fases[i].predecessors.push(i-1);
-    }
+  if(t.includes("ohne unterbrechung")){
+    feiten.push("Werk zonder onderbreking uitvoeren.");
+    risico.planning.push("Strakke planning vereist.");
   }
 
-  if(text.includes("nach fertigstellung")){
-    for(let i=1;i<fases.length;i++){
-      fases[i].predecessors.push(i-1);
-    }
+  if(t.includes("nicht parallel")){
+    feiten.push("Parallel werken uitgesloten.");
+    risico.planning.push("Geen overlap mogelijk → langere doorlooptijd.");
   }
 
-  return fases;
-}
-
-// ===== DATUM =====
-const maandMap = {
-  januar:0,februar:1,märz:2,april:3,mai:4,juni:5,
-  juli:6,august:7,september:8,oktober:9,november:10,dezember:11
-};
-
-function parseDates(text){
-  const regex = /(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(20\d{2})/gi;
-  let m, dates=[];
-
-  while((m=regex.exec(text))){
-    dates.push(new Date(m[2], maandMap[m[1]],1));
+  if(t.includes("drittfirmen")){
+    feiten.push("Afhankelijk van derden.");
+    risico.omgeving.push("Vertraging door derden mogelijk.");
   }
 
-  return dates.sort((a,b)=>a-b);
-}
-
-// ===== CPM =====
-function runCPM(fases, dates){
-
-  fases.forEach((f,i)=>{
-    f.duur = (dates[i] && dates[i+1])
-      ? (dates[i+1]-dates[i])/(1000*60*60*24)
-      : 30;
-
-    f.ES=0; f.EF=0; f.LS=0; f.LF=0; f.slack=0;
-  });
-
-  fases.forEach((f,i)=>{
-    if(f.predecessors.length){
-      f.ES = Math.max(...f.predecessors.map(p=>fases[p].EF));
-    }
-    f.EF = f.ES + f.duur;
-  });
-
-  const total = Math.max(...fases.map(f=>f.EF));
-
-  for(let i=fases.length-1;i>=0;i--){
-    let f=fases[i];
-
-    if(i===fases.length-1){
-      f.LF = total;
-    } else {
-      const succ = fases
-        .map((x,j)=>x.predecessors.includes(i)?j:null)
-        .filter(x=>x!==null);
-
-      f.LF = succ.length
-        ? Math.min(...succ.map(s=>fases[s].LS))
-        : total;
-    }
-
-    f.LS = f.LF - f.duur;
-    f.slack = f.LS - f.ES;
+  if(t.includes("abstimmung")){
+    feiten.push("Afstemming verplicht.");
+    risico.uitvoering.push("Hoge coördinatiedruk.");
   }
 
-  return { fases, total };
-}
+  // ===== INTERPRETATIE (regelgebaseerd) =====
+  if(t.includes("nicht vergütet") && t.includes("unterbrechung")){
+    interpretaties.push("Onderbrekingen en bijkomende kosten lijken voor rekening aannemer.");
+  }
 
-// ===== CONTRACT ANALYSE =====
-function contractAnalyse(text){
+  if(t.includes("drittfirmen") && t.includes("koordination")){
+    interpretaties.push("Coördinatierisico ligt mogelijk bij aannemer.");
+  }
 
-  let analyse = [];
+  // ===== ACTIES =====
+  let acties=[];
 
-  if(text.includes("nicht vergütet"))
-    analyse.push("Kosten die hier genoemd zijn worden niet apart vergoed.");
+  if(t.includes("drittfirmen"))
+    acties.push("Stem planning af met nutsbedrijven.");
 
-  if(text.includes("ohne unterbrechung"))
-    analyse.push("Werkzaamheden moeten zonder onderbreking worden uitgevoerd.");
+  if(t.includes("nicht parallel"))
+    acties.push("Plan werkzaamheden strikt sequentieel.");
 
-  if(text.includes("drittfirmen"))
-    analyse.push("Werk is afhankelijk van derden (nutsbedrijven etc.).");
+  if(t.includes("ohne unterbrechung"))
+    acties.push("Zorg voor continue inzet personeel/materieel.");
 
-  if(text.includes("nicht parallel"))
-    analyse.push("Parallel werken is contractueel uitgesloten.");
+  if(t.includes("nicht vergütet"))
+    acties.push("Controleer kosten en neem risico op in begroting.");
 
-  return analyse;
-}
-
-// ===== RISICO SCORE =====
-function risicoScore(text){
-
-  let score=0;
-
-  if(text.includes("nicht vergütet")) score+=2;
-  if(text.includes("drittfirmen")) score+=2;
-  if(text.includes("nicht parallel")) score+=2;
-  if(text.includes("ohne unterbrechung")) score+=1;
-
-  if(score>=5) return ["Hoog","risk-high"];
-  if(score>=3) return ["Middel","risk-mid"];
-  return ["Laag","risk-low"];
-}
-
-// ===== ACTIES =====
-function acties(text){
-
-  let a=[];
-
-  if(text.includes("drittfirmen"))
-    a.push("Stem planning af met nutsbedrijven.");
-
-  if(text.includes("nicht parallel"))
-    a.push("Plan werkzaamheden strikt sequentieel.");
-
-  if(text.includes("ohne unterbrechung"))
-    a.push("Zorg voor continue inzet van personeel en materieel.");
-
-  if(text.includes("nicht vergütet"))
-    a.push("Controleer kostenposten en neem risico op in begroting.");
-
-  return a;
+  return { feiten, interpretaties, risico, acties };
 }
 
 // ===== MAIN =====
 function analyse(){
 
-  const text = document.getElementById("lvText").value.toLowerCase();
+  const text = document.getElementById("lvText").value;
 
-  let fases = extractFases(text);
-  fases = parseDependencies(text, fases);
+  const res = contractExpert(text);
 
-  const dates = parseDates(text);
-  const { fases:res, total } = runCPM(fases, dates);
-
-  const contract = contractAnalyse(text);
-  const risico = risicoScore(text);
-  const actie = acties(text);
-
-  let gantt="";
-
-  res.forEach(f=>{
-    const width = (f.duur/total)*100;
-    const left = (f.ES/total)*100;
-
-    gantt+=`
-    <div class="row">
-      ${f.naam}
-      <div class="bar ${f.slack===0?'critical':'normal'}"
-           style="width:${width}%; margin-left:${left}%"></div>
-    </div>`;
-  });
-
-  document.getElementById("result").innerHTML=`
+  document.getElementById("result").innerHTML = `
 
   <div class="section">
-    <h3>Planning (CPM)</h3>
-    ${gantt}
-    <p>Kritieke pad = rood</p>
+    <h3>📜 Contractanalyse (feiten)</h3>
+    <ul class="fact">
+      ${res.feiten.map(f=>`<li>${f}</li>`).join("")}
+    </ul>
   </div>
 
   <div class="section">
-    <h3>Contractanalyse</h3>
-    <ul>${contract.map(c=>`<li>${c}</li>`).join("")}</ul>
+    <h3>🧠 Interpretatie (regelgebaseerd)</h3>
+    <ul class="warn">
+      ${res.interpretaties.map(i=>`<li>${i}</li>`).join("")}
+    </ul>
   </div>
 
   <div class="section">
-    <h3>Risico niveau</h3>
-    <p class="${risico[1]}">${risico[0]}</p>
+    <h3>⚠️ Risico's per categorie</h3>
+
+    <b>Contract:</b>
+    <ul class="risk">${res.risico.contract.map(r=>`<li>${r}</li>`).join("")}</ul>
+
+    <b>Planning:</b>
+    <ul class="risk">${res.risico.planning.map(r=>`<li>${r}</li>`).join("")}</ul>
+
+    <b>Uitvoering:</b>
+    <ul class="risk">${res.risico.uitvoering.map(r=>`<li>${r}</li>`).join("")}</ul>
+
+    <b>Omgeving:</b>
+    <ul class="risk">${res.risico.omgeving.map(r=>`<li>${r}</li>`).join("")}</ul>
   </div>
 
   <div class="section">
-    <h3>Actiepunten uitvoerder</h3>
-    <ul>${actie.map(a=>`<li>${a}</li>`).join("")}</ul>
+    <h3>🧑‍🔧 Actiepunten uitvoerder</h3>
+    <ul>
+      ${res.acties.map(a=>`<li>${a}</li>`).join("")}
+    </ul>
   </div>
   `;
-}
-
-// ===== PDF =====
-function exportPDF(){
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  doc.text("LV Analyse",10,10);
-  doc.save("analyse.pdf");
 }
 
 </script>
