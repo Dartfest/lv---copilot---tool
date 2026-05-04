@@ -8,17 +8,37 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
-    textarea { width:100%; height:260px; font-family:monospace; white-space:pre-wrap; }
-    button { padding:6px 12px; margin:6px 0; }
-    .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
-    .plan {
-      border-left:4px solid #2563eb;
-      background:#eff6ff;
-      padding:10px;
-      margin:10px 0;
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f4f6f8;
     }
-    .muted { color:#555; font-size:0.9em; }
+    textarea {
+      width: 100%;
+      height: 260px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    button {
+      padding: 6px 12px;
+      margin: 6px 0;
+    }
+    .box {
+      background: #fff;
+      padding: 16px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .plan {
+      border-left: 4px solid #2563eb;
+      background: #eff6ff;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    .muted {
+      color: #555;
+      font-size: 0.9em;
+    }
   </style>
 </head>
 
@@ -42,7 +62,10 @@
 <script>
 async function leesLV() {
   const f = document.getElementById("file").files[0];
-  if (!f) return alert("Kies eerst een PDF");
+  if (!f) {
+    alert("Kies eerst een PDF");
+    return;
+  }
 
   const buffer = await f.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({
@@ -59,6 +82,7 @@ async function leesLV() {
     }
     text += "\n";
   }
+
   document.getElementById("lvText").value = text;
 }
 
@@ -84,12 +108,14 @@ function analyse() {
 
   while ((m = planRegex.exec(text)) !== null) {
     const plan = "Planstraße " + m[2];
-    if (!data[plan]) data[plan] = { periodes: [], start: null, end: null };
+    if (!data[plan]) {
+      data[plan] = { periodes: [], start: null, end: null };
+    }
 
-    const frag = text.slice(m.index, m.index + 1500);
+    const fragment = text.slice(m.index, m.index + 1500);
     let p;
 
-    while ((p = exactRegex.exec(frag))) {
+    while ((p = exactRegex.exec(fragment)) !== null) {
       data[plan].periodes.push(p[0]);
       const s = parseDate(p[1]);
       const e = parseDate(p[3]);
@@ -97,27 +123,51 @@ function analyse() {
       if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
     }
 
-    while ((p = tekstRegex.exec(frag))) {
+    while ((p = tekstRegex.exec(fragment)) !== null) {
       if (!data[plan].periodes.includes(p[0])) {
         data[plan].periodes.push(p[0]);
       }
     }
   }
 
-  Object.entries(data).forEach(([p,d], i) => {
+  let index = 1;
+  for (const [plan, d] of Object.entries(data)) {
     const div = document.createElement("div");
     div.className = "plan";
+
+    let periodeBlok;
+    let samenvatting;
+
+    if (d.start && d.end) {
+      periodeBlok = `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`;
+      samenvatting = `
+        <p>
+          <strong>Samenvatting:</strong><br>
+          ${plan} wordt uitgevoerd in de periode van
+          ${d.start.toLocaleDateString()} tot en met
+          ${d.end.toLocaleDateString()}.
+          De onderstaande tijdvakken zijn letterlijk overgenomen uit het LV.
+        </p>`;
+    } else {
+      periodeBlok = `<p class="muted">Geen exact datum‑tijdvak in LV vermeld</p>`;
+      samenvatting = `
+        <p>
+          <strong>Samenvatting:</strong><br>
+          Voor ${plan} is in het LV geen exact start‑ en eindmoment opgenomen.
+          De uitvoering is gekoppeld aan globale of indicatieve periodes zoals hieronder vermeld.
+        </p>`;
+    }
+
     div.innerHTML = `
-      <strong>${i+1}. ${p}</strong>
-      ${
-        d.start && d.end
-        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
-        : `<p class="muted">Geen exact datum‑tijdvak in LV vermeld</p>`
-      }
+      <strong>${index}. ${plan}</strong>
+      ${periodeBlok}
+      ${samenvatting}
       <ul>${d.periodes.map(x => `<li>${x}</li>`).join("")}</ul>
     `;
+
     out.appendChild(div);
-  });
+    index++;
+  }
 }
 </script>
 
