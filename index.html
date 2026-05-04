@@ -2,146 +2,73 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Tool Slim</title>
+<title>LV Intelligence Offline Pro</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
-body { font-family: Arial; padding:20px; background:#f4f6f8; }
+body { font-family: Arial; margin:0; background:#f1f5f9; }
+.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
+.container { padding:20px; }
 
-input, textarea { width:100%; margin:5px 0; }
-button { margin:5px 0; }
+textarea { width:100%; height:140px; margin-bottom:10px; }
 
-.section { background:#fff; padding:12px; margin:10px 0; border-left:5px solid #2563eb; }
+button {
+  padding:10px;
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  margin-right:5px;
+  cursor:pointer;
+}
 
-.high { color:#dc2626; font-weight:bold; }
-.mid { color:#f59e0b; font-weight:bold; }
-.low { color:#16a34a; font-weight:bold; }
+.grid {
+  display:grid;
+  grid-template-columns: repeat(4,1fr);
+  gap:10px;
+}
 
+.card {
+  background:#fff;
+  padding:12px;
+  border-radius:6px;
+}
+
+.big { font-size:20px; font-weight:bold; }
+
+.high { color:#dc2626; }
+.mid { color:#f59e0b; }
+.low { color:#16a34a; }
+
+.section {
+  background:#fff;
+  padding:12px;
+  margin-top:10px;
+  border-radius:6px;
+}
 </style>
 </head>
 
 <body>
 
-<h1>LV Tool Slim</h1>
+<div class="header">LV Intelligence – Offline Pro</div>
 
-<input id="user" placeholder="Gebruiker">
-<button onclick="login()">Start</button>
+<div class="container">
 
-<div id="app" style="display:none;">
-
-<input id="projectName" placeholder="Project naam">
 <textarea id="lvText" placeholder="Plak hier je LV tekst"></textarea>
 
-<button onclick="saveProject()">Opslaan</button>
 <button onclick="analyse()">Analyse</button>
 <button onclick="exportPDF()">Export PDF</button>
 
-<h3>Projecten</h3>
-<div id="projects"></div>
-
-<div id="result"></div>
+<div id="out"></div>
 
 </div>
 
 <script>
 
-let currentUser="";
-
-// ===== LOGIN =====
-function login(){
-  currentUser=document.getElementById("user").value;
-  document.getElementById("app").style.display="block";
-  loadProjects();
-}
-
-// ===== SAVE =====
-function saveProject(){
-  let p=JSON.parse(localStorage.getItem("p")||"[]");
-
-  p.push({
-    user:currentUser,
-    name:document.getElementById("projectName").value,
-    text:document.getElementById("lvText").value
-  });
-
-  localStorage.setItem("p",JSON.stringify(p));
-  loadProjects();
-}
-
-// ===== LOAD =====
-function loadProjects(){
-  let p=JSON.parse(localStorage.getItem("p")||"[]");
-
-  document.getElementById("projects").innerHTML =
-    p.filter(x=>x.user===currentUser).map(x=>`
-      <div class="section">
-        <b>${x.name}</b>
-        <button onclick="openProject(\`${x.text}\`)">Open</button>
-      </div>
-    `).join("");
-}
-
-function openProject(t){
-  document.getElementById("lvText").value=t;
-}
-
-// ===== VERTALING =====
-function vertaal(t){
-  return t
-    .replace(/nicht/gi,"niet")
-    .replace(/arbeiten/gi,"werkzaamheden")
-    .replace(/fertigstellung/gi,"afronding")
-    .replace(/beginn/gi,"start")
-    .replace(/bau/gi,"bouw");
-}
-
-// ===== SAMENVATTING =====
-function samenvatting(text){
-  let regels=text.split(".");
-  return regels.filter(r =>
-    r.includes("bau") ||
-    r.includes("arbeiten") ||
-    r.includes("beginn")
-  ).slice(0,6);
-}
-
-// ===== DATUM =====
-const maanden={
-  januar:1,februar:2,märz:3,april:4,mai:5,juni:6,
-  juli:7,august:8,september:9,oktober:10,november:11,dezember:12
-};
-
-function planning(text){
-  let r=/(juni|juli|august|mai|april|märz)\s+(20\d{2})/gi;
-  let m, arr=[];
-  while((m=r.exec(text))){
-    arr.push(m[1]+" "+m[2]);
-  }
-  return arr;
-}
-
-// ===== RISICO =====
-function risico(text){
-
-  let c=[], p=[], u=[];
-
-  if(text.includes("nicht vergütet"))
-    c.push("Kosten niet vergoed");
-
-  if(text.includes("nicht parallel"))
-    p.push("Geen parallel werk mogelijk");
-
-  if(text.includes("drittfirmen"))
-    u.push("Afhankelijkheid derden");
-
-  let score = c.length + p.length + u.length;
-
-  let label = score>=3 ? ["HOOG","high"]
-             : score>=2 ? ["MIDDEL","mid"]
-             : ["LAAG","low"];
-
-  return {c,p,u,label};
+// ===== HULP =====
+function contains(t, words){
+  return words.some(w=>t.includes(w));
 }
 
 // ===== ANALYSE =====
@@ -149,39 +76,106 @@ function analyse(){
 
   let t=document.getElementById("lvText").value.toLowerCase();
 
-  let sam=samenvatting(t);
-  let plan=planning(t);
-  let r=risico(t);
+  // ===== RISICO =====
+  let score=0;
 
-  let html=`
+  if(contains(t,["nicht vergütet","nicht gesondert"])) score+=2;
+  if(contains(t,["drittfirmen","versorgung"])) score+=2;
+  if(contains(t,["unterbrechung"])) score+=1;
+  if(contains(t,["nicht parallel"])) score+=1;
+
+  let risico = score>=4 ? ["HOOG","high"]
+              : score>=2 ? ["MIDDEL","mid"]
+              : ["LAAG","low"];
+
+  let kosten = score>=4 ? "€50k - €150k"
+              : score>=2 ? "€10k - €50k"
+              : "< €10k";
+
+  // ===== FASERING =====
+  let fases=[];
+  if(t.includes("1. bauabschnitt")) fases.push("Fase 1");
+  if(t.includes("2. bauabschnitt")) fases.push("Fase 2");
+  if(t.includes("3. bauabschnitt")) fases.push("Fase 3");
+
+  // ===== RISICO DETAILS =====
+  let risicoLijst=[];
+  if(t.includes("nicht vergütet")) risicoLijst.push("Kosten worden niet vergoed");
+  if(t.includes("drittfirmen")) risicoLijst.push("Afhankelijkheid derden");
+  if(t.includes("nicht parallel")) risicoLijst.push("Geen parallel werken mogelijk");
+
+  // ===== CONTRACT =====
+  let contract=[];
+  if(t.includes("nicht vergütet")) contract.push("Meerwerk risico");
+  if(t.includes("unterbrechung")) contract.push("Onderbreking niet vergoed");
+
+  // ===== ACTIES =====
+  let acties=[];
+  if(t.includes("drittfirmen")) acties.push("Afstemming nutsbedrijven");
+  if(t.includes("nicht parallel")) acties.push("Planning strak faseren");
+
+  // ===== SAMENVATTING =====
+  let samenvatting = `
+Dit project bevat meerdere fasen met afhankelijkheden van derden.
+De uitvoering vereist strakke planning zonder parallelle werkzaamheden.
+Belangrijkste risico’s liggen bij kostenverdeling en externe partijen.
+  `;
+
+  // ===== OUTPUT =====
+  document.getElementById("out").innerHTML=`
+
+  <div class="grid">
+
+    <div class="card">
+      <div>Risico</div>
+      <div class="big ${risico[1]}">${risico[0]}</div>
+    </div>
+
+    <div class="card">
+      <div>Kostenimpact</div>
+      <div class="big">${kosten}</div>
+    </div>
+
+    <div class="card">
+      <div>Fases</div>
+      <div class="big">${fases.length}</div>
+    </div>
+
+    <div class="card">
+      <div>Advies</div>
+      <div class="big ${risico[1]}">
+        ${score>=4?"Let op":"Beheersbaar"}
+      </div>
+    </div>
+
+  </div>
 
   <div class="section">
     <h3>Samenvatting</h3>
-    <ul>
-      ${sam.map(s=>`<li>${vertaal(s)}</li>`).join("")}
-    </ul>
+    <p>${samenvatting}</p>
   </div>
 
   <div class="section">
-    <h3>Planning</h3>
-    <ul>${plan.map(p=>`<li>${p}</li>`).join("")}</ul>
+    <h3>Fasering</h3>
+    <ul>${fases.map(f=>`<li>${f}</li>`).join("")}</ul>
   </div>
 
   <div class="section">
-    <h3>Risico (${r.label[0]})</h3>
-
-    <b>Contract:</b>
-    <ul>${r.c.map(x=>`<li class="${r.label[1]}">${x}</li>`).join("")}</ul>
-
-    <b>Planning:</b>
-    <ul>${r.p.map(x=>`<li class="${r.label[1]}">${x}</li>`).join("")}</ul>
-
-    <b>Uitvoering:</b>
-    <ul>${r.u.map(x=>`<li class="${r.label[1]}">${x}</li>`).join("")}</ul>
+    <h3>Risico’s</h3>
+    <ul>${risicoLijst.map(r=>`<li class="${risico[1]}">${r}</li>`).join("")}</ul>
   </div>
+
+  <div class="section">
+    <h3>Contractanalyse</h3>
+    <ul>${contract.map(c=>`<li>${c}</li>`).join("")}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Acties uitvoering</h3>
+    <ul>${acties.map(a=>`<li>${a}</li>`).join("")}</ul>
+  </div>
+
   `;
-
-  document.getElementById("result").innerHTML=html;
 }
 
 // ===== PDF =====
@@ -190,7 +184,7 @@ function exportPDF(){
   const doc = new jsPDF();
 
   doc.text("LV Analyse",10,10);
-  doc.text(document.getElementById("result").innerText,10,20);
+  doc.text(document.getElementById("out").innerText,10,20);
 
   doc.save("analyse.pdf");
 }
