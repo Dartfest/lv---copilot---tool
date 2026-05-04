@@ -1,195 +1,122 @@
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-<meta charset="UTF-8">
-<title>LV Intelligence Offline Pro</title>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-<style>
-body { font-family: Arial; margin:0; background:#f1f5f9; }
-.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
-.container { padding:20px; }
-
-textarea { width:100%; height:140px; margin-bottom:10px; }
-
-button {
-  padding:10px;
-  background:#2563eb;
-  color:#fff;
-  border:none;
-  margin-right:5px;
-  cursor:pointer;
-}
-
-.grid {
-  display:grid;
-  grid-template-columns: repeat(4,1fr);
-  gap:10px;
-}
-
-.card {
-  background:#fff;
-  padding:12px;
-  border-radius:6px;
-}
-
-.big { font-size:20px; font-weight:bold; }
-
-.high { color:#dc2626; }
-.mid { color:#f59e0b; }
-.low { color:#16a34a; }
-
-.section {
-  background:#fff;
-  padding:12px;
-  margin-top:10px;
-  border-radius:6px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="header">LV Intelligence – Offline Pro</div>
-
-<div class="container">
-
-<textarea id="lvText" placeholder="Plak hier je LV tekst"></textarea>
-
-<button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
-
-<div id="out"></div>
-
-</div>
-
 <script>
 
-// ===== HULP =====
-function contains(t, words){
-  return words.some(w=>t.includes(w));
+// ===== MAANDEN =====
+const months = {
+  "januar":1,"februar":2,"märz":3,"april":4,"mai":5,
+  "juni":6,"juli":7,"august":8,"september":9
+};
+
+// ===== DATUM PARSER =====
+function parseDates(text){
+  const regex = /(januar|februar|märz|april|mai|juni|juli|august|september)\s+(20\d{2})/gi;
+  let dates=[];
+  let m;
+
+  while((m = regex.exec(text))){
+    dates.push({
+      raw:m[0],
+      month:months[m[1]],
+      year:parseInt(m[2]),
+      value:parseInt(m[2])*12 + months[m[1]]
+    });
+  }
+
+  return dates;
 }
 
-// ===== ANALYSE =====
-function analyse(){
+// ===== FASE PARSER =====
+function parsePhases(text){
 
-  let t=document.getElementById("lvText").value.toLowerCase();
+  let phases=[];
+  const regex = /(\d\.\s*bauabschnitt).*?planstraße\s*([a-z])/gi;
+  let m;
 
-  // ===== RISICO =====
-  let score=0;
+  while((m = regex.exec(text))){
+    phases.push({
+      name:`Fase ${m[1][0]} - Planstraat ${m[2].toUpperCase()}`
+    });
+  }
 
-  if(contains(t,["nicht vergütet","nicht gesondert"])) score+=2;
-  if(contains(t,["drittfirmen","versorgung"])) score+=2;
-  if(contains(t,["unterbrechung"])) score+=1;
-  if(contains(t,["nicht parallel"])) score+=1;
+  return phases;
+}
 
-  let risico = score>=4 ? ["HOOG","high"]
-              : score>=2 ? ["MIDDEL","mid"]
-              : ["LAAG","low"];
+// ===== PLANNING LOGICA =====
+function buildPlanning(text){
 
-  let kosten = score>=4 ? "€50k - €150k"
-              : score>=2 ? "€10k - €50k"
-              : "< €10k";
+  let dates = parseDates(text);
+  let phases = parsePhases(text);
 
-  // ===== FASERING =====
-  let fases=[];
-  if(t.includes("1. bauabschnitt")) fases.push("Fase 1");
-  if(t.includes("2. bauabschnitt")) fases.push("Fase 2");
-  if(t.includes("3. bauabschnitt")) fases.push("Fase 3");
+  // simpele koppeling: fase i → datum i
+  for(let i=0;i<phases.length;i++){
 
-  // ===== RISICO DETAILS =====
-  let risicoLijst=[];
-  if(t.includes("nicht vergütet")) risicoLijst.push("Kosten worden niet vergoed");
-  if(t.includes("drittfirmen")) risicoLijst.push("Afhankelijkheid derden");
-  if(t.includes("nicht parallel")) risicoLijst.push("Geen parallel werken mogelijk");
+    phases[i].start = dates[i]?.value || dates[0]?.value;
+    phases[i].end   = dates[i+1]?.value || dates[dates.length-1]?.value;
 
-  // ===== CONTRACT =====
-  let contract=[];
-  if(t.includes("nicht vergütet")) contract.push("Meerwerk risico");
-  if(t.includes("unterbrechung")) contract.push("Onderbreking niet vergoed");
+    phases[i].duration = phases[i].end - phases[i].start;
+  }
 
-  // ===== ACTIES =====
-  let acties=[];
-  if(t.includes("drittfirmen")) acties.push("Afstemming nutsbedrijven");
-  if(t.includes("nicht parallel")) acties.push("Planning strak faseren");
+  return phases;
+}
 
-  // ===== SAMENVATTING =====
-  let samenvatting = `
-Dit project bevat meerdere fasen met afhankelijkheden van derden.
-De uitvoering vereist strakke planning zonder parallelle werkzaamheden.
-Belangrijkste risico’s liggen bij kostenverdeling en externe partijen.
-  `;
+// ===== TIJDSBALK =====
+function renderTimeline(phases){
 
-  // ===== OUTPUT =====
-  document.getElementById("out").innerHTML=`
+  if(phases.length === 0) return "<p>Geen planning gevonden</p>";
 
-  <div class="grid">
+  let min = Math.min(...phases.map(p=>p.start));
+  let max = Math.max(...phases.map(p=>p.end));
+  let total = max - min;
 
-    <div class="card">
-      <div>Risico</div>
-      <div class="big ${risico[1]}">${risico[0]}</div>
-    </div>
+  return phases.map(p=>{
 
-    <div class="card">
-      <div>Kostenimpact</div>
-      <div class="big">${kosten}</div>
-    </div>
+    let left = ((p.start - min)/total)*100;
+    let width = (p.duration/total)*100;
 
-    <div class="card">
-      <div>Fases</div>
-      <div class="big">${fases.length}</div>
-    </div>
+    let critical = p.duration > 6 ? "critical" : "normal";
 
-    <div class="card">
-      <div>Advies</div>
-      <div class="big ${risico[1]}">
-        ${score>=4?"Let op":"Beheersbaar"}
+    return `
+    <div style="margin-bottom:8px;">
+      <b>${p.name}</b>
+      <div style="background:#ddd;height:20px;border-radius:4px;">
+        <div class="${critical}" style="
+          margin-left:${left}%;
+          width:${width}%;
+          height:20px;
+          border-radius:4px;">
+        </div>
       </div>
     </div>
+    `;
+  }).join("");
+}
 
+// ===== MAIN =====
+function analyse(){
+
+  let t = lvText.value.toLowerCase();
+
+  let planning = buildPlanning(t);
+
+  document.getElementById("out").innerHTML = `
+
+  <div class="section">
+    <h3>Planning per fase</h3>
+    ${planning.map(p=>`
+      <div>
+        <b>${p.name}</b><br>
+        Start: ${p.start}<br>
+        Eind: ${p.end}<br>
+        Duur: ${p.duration} maanden
+      </div><br>
+    `).join("")}
   </div>
 
   <div class="section">
-    <h3>Samenvatting</h3>
-    <p>${samenvatting}</p>
-  </div>
-
-  <div class="section">
-    <h3>Fasering</h3>
-    <ul>${fases.map(f=>`<li>${f}</li>`).join("")}</ul>
-  </div>
-
-  <div class="section">
-    <h3>Risico’s</h3>
-    <ul>${risicoLijst.map(r=>`<li class="${risico[1]}">${r}</li>`).join("")}</ul>
-  </div>
-
-  <div class="section">
-    <h3>Contractanalyse</h3>
-    <ul>${contract.map(c=>`<li>${c}</li>`).join("")}</ul>
-  </div>
-
-  <div class="section">
-    <h3>Acties uitvoering</h3>
-    <ul>${acties.map(a=>`<li>${a}</li>`).join("")}</ul>
+    <h3>Tijdsbalk</h3>
+    ${renderTimeline(planning)}
   </div>
 
   `;
-}
-
-// ===== PDF =====
-function exportPDF(){
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  doc.text("LV Analyse",10,10);
-  doc.text(document.getElementById("out").innerText,10,20);
-
-  doc.save("analyse.pdf");
 }
 
 </script>
-
-</body>
-</html>
