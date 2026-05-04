@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool (Auto vertaling)</title>
+<title>LV Analyse Tool (Optimale NL vertaling)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
@@ -20,7 +20,7 @@ button { padding:8px 14px; margin:8px 0; }
 
 <body>
 
-<h1>LV Analyse (automatische vertaling)</h1>
+<h1>LV Analyse (beste gratis NL vertaling)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -34,6 +34,80 @@ button { padding:8px 14px; margin:8px 0; }
 </div>
 
 <script>
+
+// ================= CACHE =================
+const cache = {};
+
+// ================= VERTALING =================
+async function vertaal(t){
+
+  if(cache[t]) return cache[t];
+
+  await new Promise(r => setTimeout(r, 200));
+
+  // ---- 1 LibreTranslate ----
+  try{
+    const res = await fetch("https://libretranslate.de/translate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        q: t,
+        source: "de",
+        target: "nl"
+      })
+    });
+
+    const data = await res.json();
+
+    if(data.translatedText){
+      return cache[t] = data.translatedText;
+    }
+
+  }catch(e){}
+
+  // ---- 2 MyMemory ----
+  try{
+    const res2 = await fetch(
+      "https://api.mymemory.translated.net/get?q=" 
+      + encodeURIComponent(t) + "&langpair=de|nl"
+    );
+
+    const data2 = await res2.json();
+
+    if(data2.responseData?.translatedText){
+      return cache[t] = data2.responseData.translatedText;
+    }
+
+  }catch(e){}
+
+  // ---- 3 fallback (slimme basis NL) ----
+  let r = t.toLowerCase();
+
+  const dict = {
+    "arbeiten":"werkzaamheden",
+    "bau":"bouw",
+    "kanal":"riolering",
+    "leitung":"leiding",
+    "kabel":"kabel",
+    "herstellung":"aanleg",
+    "rückbau":"sloop",
+    "im":"in",
+    "bis":"tot",
+    "der":"de",
+    "die":"de",
+    "das":"het",
+    "und":"en",
+    "müssen":"moeten",
+    "werden":"worden",
+    "abgestimmt":"afgestemd"
+  };
+
+  Object.keys(dict).forEach(k=>{
+    r = r.replaceAll(k, dict[k]);
+  });
+
+  return cache[t] = r;
+}
 
 // ================= PDF =================
 async function leesLV(){
@@ -67,34 +141,6 @@ const maandMap = {
   "oktober":9,"november":10,"dezember":11
 };
 
-// ================= GRATIS VERTALING =================
-async function vertaal(t){
-
-  try{
-    const res = await fetch("https://libretranslate.de/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        q: t,
-        source: "de",
-        target: "nl",
-        format: "text"
-      })
-    });
-
-    const data = await res.json();
-
-    if(data.translatedText){
-      return data.translatedText;
-    }
-
-  }catch(e){
-    console.log("vertaling fout", e);
-  }
-
-  return "(vertaling mislukt)";
-}
-
 // ================= SAMENVATTING =================
 function samenvatting(frag){
   const regels = frag.split("\n");
@@ -102,25 +148,9 @@ function samenvatting(frag){
   return regels.filter(r => keys.some(k => r.toLowerCase().includes(k))).slice(0,5);
 }
 
-// ================= RISICO =================
-function risico(d){
-  let r=[];
-
-  if(d.tijd.length>1) r.push("Meerdere fasen (let op overlap)");
-  if(!d.end) r.push("Geen einddatum");
-
-  if(d.start && d.end){
-    let days=(d.end-d.start)/(1000*60*60*24);
-    if(days<7) r.push("Zeer korte periode");
-  }
-
-  return r.length? r:["Geen bijzonderheden"];
-}
-
 // ================= MERGE =================
 function mergeTijd(tijd){
   if(!tijd.length) return [];
-
   tijd.sort((a,b)=>a.start-b.start);
   let merged=[tijd[0]];
 
@@ -134,25 +164,7 @@ function mergeTijd(tijd){
       merged.push(cur);
     }
   }
-
   return merged;
-}
-
-// ================= GAPS =================
-function berekenGaten(tijd){
-  let gaps=[];
-  for(let i=1;i<tijd.length;i++){
-    const prev=tijd[i-1];
-    const cur=tijd[i];
-
-    if(cur.start > prev.end){
-      gaps.push({
-        start: prev.end,
-        end: cur.start
-      });
-    }
-  }
-  return gaps;
 }
 
 // ================= ANALYSE =================
@@ -164,7 +176,6 @@ async function analyse(){
 
   const planRegex = /Planstra(ß|ss)e[\s]+([A-Z])/gi;
   const exactRegex = /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}).*?(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
-  const maandRegex = /(im|bis)\s+(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(\d{4})/gi;
 
   let data={};
   let m;
@@ -173,45 +184,16 @@ async function analyse(){
 
     const plan="Planstraße "+m[2];
 
-    if(!data[plan]) data[plan]={tijd:[], start:null, end:null, sam:[]};
+    if(!data[plan]) data[plan]={tijd:[], sam:[]};
 
     const frag = text.slice(m.index, m.index+2000);
 
     let d;
-
     while((d=exactRegex.exec(frag))){
       const s=parseDate(d[1]);
       const e=parseDate(d[2]);
-
       if(s&&e){
         data[plan].tijd.push({start:s,end:e});
-
-        if(!data[plan].start || s<data[plan].start) data[plan].start=s;
-        if(!data[plan].end || e>data[plan].end) data[plan].end=e;
-      }
-    }
-
-    let mm;
-    let tempStart=null;
-
-    while((mm=maandRegex.exec(frag))){
-      const type=mm[1];
-      const maand=maandMap[mm[2].toLowerCase()];
-      const jaar=parseInt(mm[3]);
-
-      if(type==="im"){
-        tempStart = new Date(jaar, maand, 1);
-      }
-
-      if(type==="bis" && tempStart){
-        const eind = new Date(jaar, maand+1, 0);
-
-        data[plan].tijd.push({start:tempStart, end:eind});
-
-        if(!data[plan].start || tempStart<data[plan].start) data[plan].start=tempStart;
-        if(!data[plan].end || eind>data[plan].end) data[plan].end=eind;
-
-        tempStart=null;
       }
     }
 
@@ -220,40 +202,14 @@ async function analyse(){
     });
   }
 
-  // ================= OUTPUT =================
+  // OUTPUT
   for(const [plan,d] of Object.entries(data)){
 
     d.tijd = mergeTijd(d.tijd);
-    const gaps = berekenGaten(d.tijd);
 
     const div=document.createElement("div");
     div.className="plan";
-
-    div.innerHTML=`
-    <strong>${plan}</strong>
-
-    <b>Fasen:</b>
-    ${d.tijd.map((t,i)=>`
-      <div class="fase">
-        Fase ${i+1}: ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
-      </div>
-    `).join("")}
-
-    <b>Onderbrekingen:</b>
-    ${
-      gaps.length
-      ? gaps.map(g=>`
-        <div class="gap">
-          ${g.start.toLocaleDateString()} → ${g.end.toLocaleDateString()}
-        </div>
-      `).join("")
-      : `<div class="muted">Geen</div>`
-    }
-
-    <b>Werkzaamheden:</b>
-    <ul class="werk"></ul>
-    `;
-
+    div.innerHTML=`<strong>${plan}</strong><ul class="werk"></ul>`;
     out.appendChild(div);
 
     const lijst = div.querySelector(".werk");
@@ -267,7 +223,6 @@ async function analyse(){
       li.innerHTML = `${s}<br><span class="muted">→ ${v}</span>`;
     }
   }
-
 }
 
 </script>
