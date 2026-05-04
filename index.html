@@ -2,16 +2,16 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV‑fasen → Uitvoerderssamenvatting</title>
+<title>LV → Planstraße → Uitvoering</title>
 
-<!-- PDF.js -->
+<!-- ✅ PDF.js CORRECT -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
-<!-- jsPDF -->
+<!-- ✅ jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
@@ -20,12 +20,12 @@ body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 textarea { width:100%; min-height:160px; font-family:monospace; padding:10px; }
 button { padding:6px 12px; margin:4px 6px 4px 0; }
 
-.phase { padding:14px; border-left:8px solid; border-radius:6px; margin-top:16px; }
-.phase1 { background:#f3e8ff; border-color:#9333ea; } /* paars */
-.phase2 { background:#e0f2fe; border-color:#0284c7; } /* blauw */
-.phase3 { background:#dcfce7; border-color:#16a34a; } /* groen */
-.phase4 { background:#ffedd5; border-color:#ea580c; } /* oranje */
-.phaseX { background:#f3f4f6; border-color:#6b7280; } /* grijs */
+.plan { padding:14px; border-left:8px solid; border-radius:6px; margin-top:16px; }
+.pa { background:#f3e8ff; border-color:#9333ea; }
+.pb { background:#e0f2fe; border-color:#0284c7; }
+.pc { background:#dcfce7; border-color:#16a34a; }
+.pd { background:#ffedd5; border-color:#ea580c; }
+.px { background:#f3f4f6; border-color:#6b7280; }
 
 ul { margin-left:18px; }
 </style>
@@ -33,18 +33,18 @@ ul { margin-left:18px; }
 
 <body>
 
-<h1>LV‑fasen → Uitvoerderssamenvatting</h1>
+<h1>LV – Analyse per Planstraße</h1>
 
 <div class="box">
   <h2>1. LV‑PDF(s)</h2>
   <input type="file" id="lvFiles" multiple accept=".pdf">
   <button onclick="readLV()">Lees LV</button>
-  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
+  <textarea id="lvText"></textarea>
 </div>
 
 <div class="box">
-  <h2>2. Analyse per LV‑fase</h2>
-  <button onclick="analyseFasen()">Analyseer LV‑fasen</button>
+  <h2>2. Analyse per Planstraße</h2>
+  <button onclick="analysePlanstrassen()">Analyseer</button>
   <button onclick="exportUitvoerderPDF()">📄 PDF – Uitvoerderssamenvatting</button>
   <div id="output"></div>
 </div>
@@ -68,52 +68,55 @@ async function readLV() {
   lvText.value = t;
 }
 
-/* ===== LV-FASEN ANALYSE ===== */
-let faseData = [];
+/* ===== PLANSTRASSE ANALYSE ===== */
+let planData = [];
 
-function analyseFasen() {
-  faseData = [];
+function analysePlanstrassen() {
+  planData = [];
   output.innerHTML = "";
 
   const text = lvText.value;
-  const chunks = text.split(/(Fase\s+\d+|Bauabschnitt\s+\w+|Abschnitt\s+\w+)/i);
 
-  for (let i = 1; i < chunks.length; i += 2) {
-    const titel = chunks[i].trim();
-    const inhoud = chunks[i + 1] || "";
+  // Split alleen op Planstraße
+  const parts = text.split(/(Planstraße\s+[A-Z](?:\s*\([^)]+\))?|Plänstraße\s+[A-Z])/i);
 
+  for (let i = 1; i < parts.length; i += 2) {
+    const titel = parts[i].trim();
+    const inhoud = parts[i+1] || "";
     const t = inhoud.toLowerCase();
+
+    // Kleur bepalen
+    let cls = "px";
+    if (titel.includes("A")) cls="pa";
+    else if (titel.includes("B")) cls="pb";
+    else if (titel.includes("C")) cls="pc";
+    else if (titel.includes("D")) cls="pd";
+
+    // Risico / aandacht
     const risico = [];
-    if (t.includes("abweich") || t.includes("meerwerk"))
-      risico.push("Afwijkingen / meerwerk genoemd");
-    if (t.includes("nach maßgabe") || t.includes("gemäß"))
-      risico.push("Uitvoering strikt volgens voorwaarden");
-    if (t.includes("optional") || t.includes("wenn erforderlich"))
-      risico.push("Onzeker scope‑element");
+    if (t.includes("abweich") || t.includes("mehr"))
+      risico.push("Afwijkingen / meerwerk mogelijk");
+    if (t.includes("nicht enthalten") || t.includes("optional"))
+      risico.push("Niet volledig opgenomen in contract");
+    if (t.includes("hand")) risico.push("Handmatig werk benoemd");
 
-    let kleur = "phaseX";
-    if (titel.match(/1/)) kleur = "phase1";
-    else if (titel.match(/2/)) kleur = "phase2";
-    else if (titel.match(/3/)) kleur = "phase3";
-    else if (titel.match(/4/)) kleur = "phase4";
+    planData.push({ titel, risico });
 
-    faseData.push({ titel, risico });
-
-    const d = document.createElement("div");
-    d.className = `phase ${kleur}`;
-    d.innerHTML = `
+    const div = document.createElement("div");
+    div.className = `plan ${cls}`;
+    div.innerHTML = `
 <h3>${titel}</h3>
 
-<strong>Belangrijk voor uitvoering:</strong>
+<strong>Uitvoering – focus voor deze Planstraße:</strong>
 <ul>
-  <li>Werkzaamheden uitsluitend binnen deze fasegrenzen</li>
-  <li>Afstemming planning met overige fasen</li>
+  <li>Alleen werkzaamheden binnen deze straat uitvoeren</li>
+  <li>Productie en planning per straat bewaken</li>
 </ul>
 
-<strong>Risico’s / aandachtspunten:</strong>
-${risico.length ? "<ul>" + risico.map(r => "<li>"+r+"</li>").join("") + "</ul>" : "<p>Geen expliciete risico’s benoemd.</p>"}
+<strong>Risico / aandachtspunten vanuit LV:</strong>
+${risico.length ? "<ul>"+risico.map(r=>"<li>"+r+"</li>").join("")+"</ul>" : "<p>Geen expliciete risico’s benoemd.</p>"}
 `;
-    output.appendChild(d);
+    output.appendChild(div);
   }
 }
 
@@ -124,32 +127,31 @@ function exportUitvoerderPDF() {
   let y = 10;
 
   pdf.setFontSize(12);
-  pdf.text("Uitvoerderssamenvatting – LV‑fasen", 10, y);
+  pdf.text("Uitvoerderssamenvatting per Planstraße",10,y);
   y += 10;
   pdf.setFontSize(10);
 
-  faseData.forEach(f => {
+  planData.forEach(p => {
     const blok = `
-${f.titel}
+${p.titel}
 
 Uitvoering:
-- Werk uitvoeren binnen fase-afbakening
-- Afstemmen met aangrenzende fasen
-- Planning kritisch volgen
+- Werken beperken tot deze Planstraße
+- Productie per straat monitoren
+- Overgang naar volgende straat expliciet afstemmen
 
 Risico’s:
-- ${f.risico.length ? f.risico.join("\n- ") : "Geen expliciete risico’s"}
+- ${p.risico.length ? p.risico.join("\n- ") : "Geen expliciete risico’s"}
 `;
-    const text = pdf.splitTextToSize(blok, 180);
-    if (y + text.length * 5 > 280) {
-      pdf.addPage();
-      y = 10;
+    const text = pdf.splitTextToSize(blok,180);
+    if (y + text.length*5 > 280) {
+      pdf.addPage(); y = 10;
     }
-    pdf.text(text, 10, y);
-    y += text.length * 5 + 8;
+    pdf.text(text,10,y);
+    y += text.length*5 + 8;
   });
 
-  pdf.save("uitvoerderssamenvatting-LV-fasen.pdf");
+  pdf.save("uitvoerderssamenvatting-planstrassen.pdf");
 }
 </script>
 
