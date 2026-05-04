@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool</title>
+<title>LV Analyse Tool (AI Vertaling)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
@@ -20,7 +20,7 @@ button { padding:8px 14px; margin:8px 0; }
 
 <body>
 
-<h1>LV Analyse (Planstraßen + tijd)</h1>
+<h1>LV Analyse (AI vertaling)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -67,73 +67,35 @@ const maandMap = {
   "oktober":9,"november":10,"dezember":11
 };
 
-// ================= SLIMME VERTALING =================
-function vertaal(t){
+// ================= AI VERTALING =================
+async function vertaalAI(t){
 
-  let r = t.toLowerCase();
+  const apiKey = "JOUW_API_KEY_HIER";
 
-  // ---- woordniveau ----
-  const dict = {
-    "rückbau":"sloop",
-    "abbruch":"sloop",
-    "herstellung":"aanleg",
-    "arbeiten":"werkzaamheden",
-    "arbeit":"werkzaamheden",
-
-    "kanal":"riolering",
-    "kabel":"kabels",
-    "leitung":"leidingen",
-    "leitungen":"leidingen",
-
-    "baumaßnahmen":"bouwwerkzaamheden",
-    "baumaßnahme":"bouwwerk",
-    "baufeld":"bouwveld",
-    "baufeldes":"bouwveld",
-
-    "straße":"straat",
-    "planstraße":"planstraat",
-
-    "erschließung":"bouwrijp maken",
-    "versorgung":"voorzieningen",
-    "entwässerung":"afwatering",
-
-    "ausführung":"uitvoering",
-    "bauablauf":"bouwplanning",
-    "bauzeit":"bouwtijd",
-    "bauzeiten":"bouwtijden",
-
-    "bauabschnitt":"bouwfase",
-    "abschnitt":"fase"
-  };
-
-  Object.keys(dict).forEach(k=>{
-    const regex = new RegExp("\\b" + k + "\\b", "gi");
-    r = r.replace(regex, dict[k]);
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Vertaal Duitse bouwkundige tekst naar correct en vloeiend Nederlands. Maak er natuurlijke zinnen van."
+        },
+        {
+          role: "user",
+          content: t
+        }
+      ],
+      temperature: 0.2
+    })
   });
 
-  // ---- zinsniveau (dit maakt het verschil) ----
-  r = r.replace(/die werkzaamheden (.*?) müssen (.*?) werden/gi,
-    "de werkzaamheden $1 moeten $2 worden");
-
-  r = r.replace(/müssen darauf abgestimmt werden/gi,
-    "moeten hierop worden afgestemd");
-
-  r = r.replace(/sind hierbei zu berücksichtigen/gi,
-    "moeten hierbij worden meegenomen");
-
-  r = r.replace(/für den bauablauf werden folgende/gi,
-    "voor de bouwplanning gelden de volgende");
-
-  r = r.replace(/ist zu beginnen/gi,
-    "moet worden gestart");
-
-  r = r.replace(/spätestens/gi,
-    "uiterlijk");
-
-  // eerste letter hoofdletter maken
-  r = r.charAt(0).toUpperCase() + r.slice(1);
-
-  return r;
+  const data = await res.json();
+  return data.choices[0].message.content.trim();
 }
 
 // ================= SAMENVATTING =================
@@ -197,7 +159,7 @@ function berekenGaten(tijd){
 }
 
 // ================= ANALYSE =================
-function analyse(){
+async function analyse(){
 
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("result");
@@ -261,7 +223,8 @@ function analyse(){
     });
   }
 
-  Object.entries(data).forEach(([plan,d],i)=>{
+  // ================= OUTPUT =================
+  for(const [plan,d] of Object.entries(data)){
 
     d.tijd = mergeTijd(d.tijd);
     const gaps = berekenGaten(d.tijd);
@@ -270,19 +233,12 @@ function analyse(){
     div.className="plan";
 
     div.innerHTML=`
-    <strong>${i+1}. ${plan}</strong>
-
-    ${
-      d.start && d.end
-      ? `<p><b>Periode:</b> ${d.start.toLocaleDateString()} → ${d.end.toLocaleDateString()}</p>`
-      : `<p class="muted">Geen volledige periode</p>`
-    }
+    <strong>${plan}</strong>
 
     <b>Fasen:</b>
     ${d.tijd.map((t,i)=>`
       <div class="fase">
-        <b>Fase ${i+1}</b><br>
-        ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
+        Fase ${i+1}: ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
       </div>
     `).join("")}
 
@@ -298,18 +254,21 @@ function analyse(){
     }
 
     <b>Werkzaamheden:</b>
-    <ul>
-    ${d.sam.map(s=>`<li>${s}<br><span class="muted">→ ${vertaal(s)}</span></li>`).join("")}
-    </ul>
-
-    <b>Risico's:</b>
-    <ul>
-    ${risico(d).map(r=>`<li>${r}</li>`).join("")}
-    </ul>
+    <ul class="werk"></ul>
     `;
 
     out.appendChild(div);
-  });
+
+    // AI vertaling per regel
+    const vertalingen = await Promise.all(
+      d.sam.map(async s=>{
+        const v = await vertaalAI(s);
+        return `<li>${s}<br><span class="muted">→ ${v}</span></li>`;
+      })
+    );
+
+    div.querySelector(".werk").innerHTML = vertalingen.join("");
+  }
 
 }
 
