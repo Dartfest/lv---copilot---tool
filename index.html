@@ -2,113 +2,104 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Copilot Tool – Master Werkvoorbereiding Infra</title>
+<title>LV + K&L Lezer – Werkend</title>
 
-<!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- PDF.js (CORRECT geladen) -->
+https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
-
-<!-- jsPDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f5f7fa; padding:20px; }
 .box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
 textarea { width:100%; min-height:200px; font-family:monospace; padding:10px; }
-button { padding:8px 14px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; margin-right:6px; }
-button.secondary { background:#6b7280; }
-.chunk { padding:12px; border-radius:6px; margin-bottom:12px; }
-.red { background:#fee2e2; border-left:6px solid #dc2626; }
-.orange { background:#ffedd5; border-left:6px solid #ea580c; }
-.green { background:#dcfce7; border-left:6px solid #16a34a; }
-.small { font-size:12px; color:#555; }
-pre { white-space:pre-wrap; }
+button { padding:8px 14px; margin-top:6px; }
+.pre { white-space:pre-wrap; background:#eef; padding:10px; }
+.status { font-size:13px; margin-top:6px; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Copilot Tool – Master Werkvoorbereiding</h1>
-<p class="small">Volledige LV + K&L analyse – calculatie & uitvoering</p>
+<h1>LV + K&L PDF Lezer (Werkend)</h1>
 
 <div class="box">
-<h2>1. LV‑bestanden (PDF met tekstlaag)</h2>
+<h2>1. Upload LV‑PDF(s)</h2>
 <input type="file" id="lvFiles" multiple accept=".pdf">
-<button class="secondary" onclick="readLVFiles()">Lees LV</button>
-<p class="small" id="lvStatus"></p>
+<button onclick="readLV()">Lees LV</button>
+<div id="lvStatus" class="status"></div>
+<textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
 
 <div class="box">
-<h2>2. LV‑tekst (controle / aanvullen)</h2>
-<textarea id="lvtext"></textarea>
-<button onclick="splitLV()">Splits in LV‑delen</button>
-</div>
-
-<div class="box">
-<h2>3. Kabels & Leidingen (PDF / TXT)</h2>
-<input type="file" id="klFiles" multiple>
-<button class="secondary" onclick="readKLFiles()">Lees K&L</button>
-<p class="small" id="klStatus"></p>
-</div>
-
-<div class="box">
-<h2>4. LV‑delen + K&L + impact</h2>
-<div id="chunks"></div>
-<button onclick="exportPDF()">Export uitvoerder‑PDF</button>
+<h2>2. Upload K&L‑PDF(s)</h2>
+<input type="file" id="klFiles" multiple accept=".pdf,.txt">
+<button onclick="readKL()">Lees K&L</button>
+<div id="klStatus" class="status"></div>
+<textarea id="klText" placeholder="K&L‑tekst verschijnt hier..."></textarea>
 </div>
 
 <script>
-let KL_TEXT = "";
+async function readPDF(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let fullText = "";
 
-/* ===== PDF lezen met foutmelding ===== */
-async function readTextFromPDF(file){
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument(new Uint8Array(buf)).promise;
-  let text = "";
-  for(let p=1;p<=pdf.numPages;p++){
+  for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
-    const c = await page.getTextContent();
-    if(c.items.length===0){
-      throw new Error("PDF bevat geen tekstlaag (gescand)");
-    }
-    text += c.items.map(i=>i.str).join(" ") + "\n";
+    const content = await page.getTextContent();
+
+    // ROBUUST: ook lege / raar gecodeerde items meenemen
+    const pageText = content.items
+      .map(i => (i.str && i.str.trim()) ? i.str : "")
+      .join(" ");
+
+    fullText += pageText + "\n";
   }
-  return text;
+
+  return fullText.trim();
 }
 
-/* ===== LV ===== */
-async function readLVFiles(){
+/* === LV === */
+async function readLV() {
   const files = lvFiles.files;
-  if(!files.length){ alert("Geen LV bestanden"); return; }
-  let t="";
-  try{
-    for(const f of files){
-      t += await readTextFromPDF(f);
+  if (!files.length) return alert("Geen LV‑PDF gekozen");
+
+  let text = "";
+  try {
+    for (const f of files) {
+      text += await readPDF(f) + "\n";
     }
-    lvtext.value = t;
-    lvStatus.innerText = "LV succesvol ingelezen";
-  }catch(e){
-    lvStatus.innerText = "⚠️ LV‑PDF zonder tekstlaag – kopieer tekst handmatig";
+    lvText.value = text;
+    lvStatus.innerText = "✅ LV succesvol gelezen";
+  } catch (e) {
+    lvStatus.innerText = "❌ LV lezen mislukt: " + e.message;
   }
 }
 
-/* ===== K&L ===== */
-async function readKLFiles(){
+/* === K&L === */
+async function readKL() {
   const files = klFiles.files;
-  if(!files.length){ alert("Geen K&L bestanden"); return; }
-  let t="";
-  for(const f of files){
-    if(f.type==="application/pdf"){
-      try{
-        t+=await readTextFromPDF(f);
-      }catch{
-        // negeer gescande PDF, geen crash
+  if (!files.length) return alert("Geen K&L gekozen");
+
+  let text = "";
+  try {
+    for (const f of files) {
+      if (f.type === "application/pdf") {
+        text += await readPDF(f) + "\n";
+      } else {
+        text += await f.text() + "\n";
       }
-    } else {
-      t+=await f.text();
     }
+    klText.value = text;
+    klStatus.innerText = "✅ K&L succesvol gelezen";
+  } catch (e) {
+    klStatus.innerText = "❌ K&L lezen mislukt: " + e.message;
   }
-  KL_TEXT = t.toLowerCase();
+}
+</script>
+
+</body>
+</html>
