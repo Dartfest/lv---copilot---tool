@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV – Uitvoerderssamenvatting per Planstraße</title>
+<title>LV – Planstraße Uitvoering & Materiaalstaat</title>
 
 <!-- ✅ pdf.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -27,6 +27,7 @@ button { padding:6px 12px; margin-right:6px; }
 .pd{background:#ffedd5;border-color:#ea580c;}
 .px{background:#f3f4f6;border-color:#6b7280;}
 
+.warn { color:#b91c1c; font-weight:bold; }
 ul { margin-left:18px; }
 h3 { margin-top:0; }
 </style>
@@ -45,116 +46,122 @@ h3 { margin-top:0; }
 
 <div class="box">
   <h2>2. Analyse</h2>
-  <button onclick="analysePlanstrassen()">Analyseer Planstraßen</button>
-  <button onclick="exportUitvoerderPDF()">📄 Uitvoerders‑PDF</button>
+  <button onclick="analyse()">Analyseer</button>
+  <button onclick="exportPDF()">📄 Uitvoerders‑PDF</button>
   <div id="output"></div>
 </div>
 
 <script>
-/* ================= PDF LEZEN ================= */
+/* ===== PDF INLEZEN ===== */
 async function readPDF(file){
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-  let text="";
+  let t = "";
   for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const c=await page.getTextContent();
-    text+=c.items.map(i=>i.str).join(" ")+"\n";
+    const page = await pdf.getPage(p);
+    const c = await page.getTextContent();
+    t += c.items.map(i=>i.str).join(" ") + "\n";
   }
-  return text;
+  return t;
 }
 
 async function readLV(){
   let t="";
-  for(const f of lvFiles.files){ t+=await readPDF(f); }
-  lvText.value=t;
+  for(const f of lvFiles.files){
+    t += await readPDF(f);
+  }
+  lvText.value = t;
 }
 
-/* ================= CORE STRUCTUUR ================= */
-let planData = {};   // {A:{sub:{}, hoeveelheid:[], uitvoering:Set(), risico:Set()}}
+/* ===== DATA ===== */
+let planData = {};
 
-function analysePlanstrassen(){
-  planData={};
+const BUIS_REGEX = /(PVC|PE[\s-]?HD|PE\s?100|BETON|STAAL)([^.\n]{0,40}(DN\s?\d+|Ø\s?\d+|SDR\s?\d+|PN\s?\d+))?/i;
+const QTY_REGEX  = /(\d+[,\.]?\d*\s?(m|lfm|m²|m3))/i;
+
+/* ===== ANALYSE ===== */
+function analyse(){
+  planData = {};
   output.innerHTML="";
-
-  const text=lvText.value;
+  const text = lvText.value;
   if(!text.trim()){ alert("LV leeg"); return; }
 
-  const regex=/Planstraße\s+([A-Z])([^.\n]*)/gi;
+  const regex = /Planstraße\s+([A-Z])([^.\n]*)/gi;
   let m;
 
-  while((m=regex.exec(text))!==null){
-    const letter=m[1];
-    const rest=m[2];        // bevat noord/zuid, meters etc.
-    const key=`Planstraße ${letter}`;
-
+  while((m = regex.exec(text)) !== null){
+    const letter = m[1];
+    const key = `Planstraße ${letter}`;
     if(!planData[key]){
-      planData[key]={
-        subdelen:new Set(),
-        hoeveelheden:new Set(),
+      planData[key] = {
+        sub:new Set(),
         uitvoering:new Set(),
-        risico:new Set()
+        risico:new Set(),
+        materiaal:{} // { "PVC DN200": totaal }
       };
     }
 
-    // Subdelen herkennen
-    if(/nord|north/i.test(rest)) planData[key].subdelen.add("Noord");
-    if(/süd|south|zuid/i.test(rest)) planData[key].subdelen.add("Zuid");
+    const frag = text.substring(m.index, m.index+700);
+    const f = frag.toLowerCase();
 
-    const fragment=text.substring(m.index,m.index+600).toLowerCase();
+    if(/nord/.test(f)) planData[key].sub.add("Noord");
+    if(/süd|zuid/.test(f)) planData[key].sub.add("Zuid");
+    if(f.includes("bauabschnitt")) planData[key].uitvoering.add("Meerdere deelvakken");
+    if(f.includes("ohne unterbrechung")) planData[key].uitvoering.add("Zonder onderbreking uitvoeren");
+    if(f.includes("abweich")||f.includes("mehr")) planData[key].risico.add("Meerwerk / afwijking mogelijk");
 
-    // Werkvolgorde / uitvoering
-    if(fragment.includes("bauabschnitt"))
-      planData[key].uitvoering.add("Uitvoering in meerdere deelvakken");
-    if(fragment.includes("ohne unterbrechung"))
-      planData[key].uitvoering.add("Zonder onderbreking uitvoeren");
-    if(fragment.includes("nach") && fragment.includes("fertigstellung"))
-      planData[key].uitvoering.add("Volgorde afhankelijk van gereedmelding vorig deel");
+    const qtyMatch = frag.match(QTY_REGEX);
+    const buisMatch = frag.match(BUIS_REGEX);
 
-    // Risico
-    if(fragment.includes("abweich")||fragment.includes("mehr"))
-      planData[key].risico.add("Meerwerk / afwijkingen mogelijk");
-    if(fragment.includes("hand"))
-      planData[key].risico.add("Handmatig werk benoemd");
-
-    // Hoeveelheden (simpel maar effectief)
-    const qty=fragment.match(/\b\d+[,\.]?\d*\s?(m|lfm|m²|m3)\b/gi);
-    if(qty) qty.forEach(q=>planData[key].hoeveelheden.add(q));
+    if(qtyMatch && buisMatch){
+      const qty = parseFloat(qtyMatch[1].replace(",","."));
+      const type = buisMatch[0].replace(/\s+/g," ").trim();
+      if(!planData[key].materiaal[type]) planData[key].materiaal[type]=0;
+      planData[key].materiaal[type]+=qty;
+    }
   }
 
-  renderPlanstrassen();
+  render();
 }
 
-/* ================= RENDER ================= */
-function renderPlanstrassen(){
+/* ===== RENDER ===== */
+function render(){
   Object.keys(planData).forEach(k=>{
-    const letter=k.slice(-1);
-    const cls=letter==="A"?"pa":letter==="B"?"pb":letter==="C"?"pc":letter==="D"?"pd":"px";
     const d=planData[k];
+    const letter=k.slice(-1);
+    const cls =
+      letter==="A"?"pa":
+      letter==="B"?"pb":
+      letter==="C"?"pc":
+      letter==="D"?"pd":"px";
+
+    const types = Object.keys(d.materiaal);
+    const multi = types.length>1;
 
     const el=document.createElement("div");
     el.className=`plan ${cls}`;
     el.innerHTML=`
 <h3>${k}</h3>
 
-<strong>Subdelen</strong>
-<p>${d.subdelen.size?[...d.subdelen].join(", "):"Geen expliciete subdeling"}</p>
+<strong>Subdelen:</strong> ${d.sub.size?[...d.sub].join(", "):"–"}<br>
 
-<strong>Werkvolgorde / uitvoering</strong>
-<ul>${d.uitvoering.size?[...d.uitvoering].map(x=>`<li>${x}</li>`).join(""):"<li>Geen specifieke volgorde benoemd</li>"}</ul>
+<strong>Werkvolgorde:</strong>
+<ul>${d.uitvoering.size?[...d.uitvoering].map(x=>`<li>${x}</li>`).join(""):"<li>Geen specifieke volgorde</li>"}</ul>
 
-<strong>Hoeveelheden (LV)</strong>
-<ul>${d.hoeveelheden.size?[...d.hoeveelheden].map(x=>`<li>${x}</li>`).join(""):"<li>Geen expliciete hoeveelheden gevonden</li>"}</ul>
+<strong>Materiaalstaat:</strong>
+<ul>${types.length?types.map(t=>`<li>${d.materiaal[t].toFixed(1)} m – ${t}</li>`).join(""):"<li>Geen buismateriaal expliciet benoemd</li>"}</ul>
 
-<strong>Risico’s</strong>
+${multi ? `<p class="warn">⚠ Meerdere buistypen in deze straat</p>`:""}
+
+<strong>Risico’s:</strong>
 <ul>${d.risico.size?[...d.risico].map(x=>`<li>${x}</li>`).join(""):"<li>Geen expliciete risico’s</li>"}</ul>
 `;
     output.appendChild(el);
   });
 }
 
-/* ================= PDF EXPORT ================= */
-function exportUitvoerderPDF(){
+/* ===== PDF ===== */
+function exportPDF(){
   const {jsPDF}=window.jspdf;
   const pdf=new jsPDF();
   let y=10;
@@ -166,25 +173,25 @@ function exportUitvoerderPDF(){
 
   Object.keys(planData).forEach(k=>{
     const d=planData[k];
-    const blok=`
+    const types=Object.keys(d.materiaal);
+    const t=`
 ${k}
-
-Subdelen:
-- ${d.subdelen.size?[...d.subdelen].join(", "):"Geen"}
 
 Werkvolgorde:
 - ${d.uitvoering.size?[...d.uitvoering].join("\n- "):"Geen"}
 
-Hoeveelheden:
-- ${d.hoeveelheden.size?[...d.hoeveelheden].join("\n- "):"Niet benoemd"}
+Materiaal:
+- ${types.length?types.map(x=>`${d.materiaal[x].toFixed(1)} m – ${x}`).join("\n- "):"Geen expliciet buismateriaal"}
+
+${types.length>1?"WAARSCHUWING: meerdere buistypen in deze straat":""}
 
 Risico’s:
 - ${d.risico.size?[...d.risico].join("\n- "):"Geen"}
 `;
-    const t=pdf.splitTextToSize(blok,180);
-    if(y+t.length*5>280){ pdf.addPage(); y=10; }
-    pdf.text(t,10,y);
-    y+=t.length*5+8;
+    const block=pdf.splitTextToSize(t,180);
+    if(y+block.length*5>280){ pdf.addPage(); y=10; }
+    pdf.text(block,10,y);
+    y+=block.length*5+8;
   });
 
   pdf.save("uitvoerderssamenvatting-planstrassen.pdf");
