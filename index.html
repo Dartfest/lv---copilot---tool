@@ -2,50 +2,42 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Offline AI LV Analyse Tool</title>
+<title>LV Analyse (Chunk AI)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:180px; font-family:monospace; margin-bottom:10px; }
-button { padding:8px 14px; margin:6px 0; }
+textarea { width:100%; height:160px; margin-bottom:10px; }
+button { padding:8px 14px; margin:5px 0; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
-.section { background:#fff; border-left:5px solid #2563eb; padding:15px; margin:10px 0; }
-.risk { color:#b91c1c; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h1>Offline AI Tender Tool (LV Analyse)</h1>
+<h1>LV Analyse (Slim opdelen)</h1>
 
 <div class="box">
-<h3>1. LV inladen</h3>
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
-<textarea id="lvText" placeholder="LV tekst komt hier..."></textarea>
+<textarea id="lvText"></textarea>
 </div>
 
 <div class="box">
-<h3>2. Prompt genereren (voor ChatGPT)</h3>
-<button onclick="genPrompt()">Genereer AI Prompt</button>
-<textarea id="prompt"></textarea>
+<button onclick="splitLV()">Split LV</button>
+<div id="chunks"></div>
 </div>
 
 <div class="box">
-<h3>3. Plak ChatGPT resultaat</h3>
-<textarea id="aiResult" placeholder="Plak hier de AI analyse..."></textarea>
-<button onclick="verwerk()">Verwerk Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
+<h3>Eindprompt</h3>
+<button onclick="eindPrompt()">Genereer eindanalyse</button>
+<textarea id="finalPrompt"></textarea>
 </div>
-
-<div id="result"></div>
 
 <script>
 
-// ===== PDF LEZEN =====
+// ===== PDF =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -63,83 +55,55 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== PROMPT =====
-function genPrompt(){
+// ===== SPLIT =====
+let parts=[];
 
-  const lv = document.getElementById("lvText").value;
+function splitLV(){
 
-  const prompt = `
-Analyseer dit LV als senior werkvoorbereider en tender engineer.
+  const text = document.getElementById("lvText").value;
+  const max = 3000; // veilige chunk grootte
 
-Geef een professioneel rapport met de volgende structuur:
-
-1. Uitgebreide samenvatting (minimaal 3 alinea's)
-2. Scope van werkzaamheden
-3. Fasering en volgorde
-4. Planning en mijlpalen
-5. Contractanalyse:
-   - kostenverdeling
-   - risicoverdeling
-   - verplichtingen aannemer
-6. Afhankelijkheden en coördinatie
-7. Risicoanalyse (duidelijk gestructureerd):
-   - Planning
-   - Contract
-   - Uitvoering
-   - Omgeving
-
-Schrijf concreet, professioneel en uitvoerbaar.
-
-LV:
-${lv}
-  `;
-
-  document.getElementById("prompt").value = prompt;
-}
-
-// ===== VERWERKEN =====
-let rapportTekst = "";
-
-function verwerk(){
-
-  const ai = document.getElementById("aiResult").value;
-
-  if(!ai) return alert("Plak eerst AI analyse");
-
-  rapportTekst = ai;
-
-  document.getElementById("result").innerHTML = `
-  <div class="section">
-    <h3>Analyse Rapport</h3>
-    <pre style="white-space:pre-wrap;">${ai}</pre>
-  </div>
-  `;
-}
-
-// ===== PDF =====
-function exportPDF(){
-
-  if(!rapportTekst){
-    alert("Geen analyse beschikbaar");
-    return;
+  parts = [];
+  for(let i=0;i<text.length;i+=max){
+    parts.push(text.substring(i,i+max));
   }
 
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const div = document.getElementById("chunks");
+  div.innerHTML="";
 
-  let y=15;
-  const lines = doc.splitTextToSize(rapportTekst,180);
+  parts.forEach((p,i)=>{
+    div.innerHTML += `
+    <div>
+      <b>Deel ${i+1}</b>
+      <textarea>
+Analyseer dit deel van een LV:
+- samenvatting
+- werkzaamheden
+- planning
+- risico's
 
-  lines.forEach(line=>{
-    if(y > 280){
-      doc.addPage();
-      y=15;
-    }
-    doc.text(line,10,y);
-    y+=5;
+${p}
+      </textarea>
+    </div>`;
   });
+}
 
-  doc.save("LV_AI_Rapport.pdf");
+// ===== EINDPROMPT =====
+function eindPrompt(){
+
+  const prompt = `
+Gebruik onderstaande deelanalyses en maak één complete LV analyse:
+
+- uitgebreide samenvatting
+- fasering
+- planning totaal
+- contractanalyse
+- risico's per categorie
+
+Plak hier alle antwoorden van ChatGPT onder elkaar.
+`;
+
+  document.getElementById("finalPrompt").value = prompt;
 }
 
 </script>
