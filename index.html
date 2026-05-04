@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>LV – Planstraße fasen uit LV</title>
 
-<!-- ✅ PDF.js – CORRECT en BEWEZEN -->
+<!-- ✅ PDF.js CORRECT GELADEN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -12,18 +12,21 @@
 </script>
 
 <style>
-body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
-h1 { margin-top:0; }
+body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
 textarea { width:100%; min-height:260px; font-family:monospace; }
-button { padding:6px 12px; margin-top:6px; margin-right:6px; }
+button { padding:6px 12px; margin-top:6px; }
 .plan { margin-top:12px; padding:12px; border-left:6px solid #2563eb; background:#eff6ff; }
+.status-ok { color:green; font-weight:bold; }
+.status-err { color:red; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
 <h1>LV – Planstraße fasering (uit LV)</h1>
+
+<p id="libStatus"></p>
 
 <div class="box">
   <h2>1. LV lezen</h2>
@@ -39,9 +42,25 @@ button { padding:6px 12px; margin-top:6px; margin-right:6px; }
 </div>
 
 <script>
+// ✅ HARD CHECK: laat zien of pdf.js écht geladen is
+window.addEventListener("load", () => {
+  const s = document.getElementById("libStatus");
+  if (window.pdfjsLib) {
+    s.textContent = "✅ pdf.js is correct geladen";
+    s.className = "status-ok";
+  } else {
+    s.textContent = "❌ pdf.js is NIET geladen";
+    s.className = "status-err";
+  }
+});
+
+// ✅ LV LEZEN
 async function leesLV() {
   const f = document.getElementById("file").files[0];
-  if (!f) { alert("Kies eerst een PDF"); return; }
+  if (!f) {
+    alert("Kies eerst een PDF");
+    return;
+  }
 
   const buf = await f.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
@@ -56,13 +75,14 @@ async function leesLV() {
   document.getElementById("lvText").value = text;
 }
 
+// ✅ ANALYSE: Planstraße + faseperiode uit LV
 function analyse() {
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("output");
   out.innerHTML = "";
 
   if (!text.trim()) {
-    alert("LV is leeg – eerst LV lezen");
+    alert("LV is leeg – lees eerst het LV");
     return;
   }
 
@@ -79,9 +99,9 @@ function analyse() {
     const key = `Planstraße ${m[1]}`;
     if (!data[key]) data[key] = new Set();
 
-    const frag = text.substring(m.index, m.index + 900);
+    const fragment = text.substring(m.index, m.index + 900);
     let d;
-    while ((d = dateRegex.exec(frag)) !== null) {
+    while ((d = dateRegex.exec(fragment)) !== null) {
       data[key].add(d[0]);
     }
   }
@@ -92,9 +112,11 @@ function analyse() {
     div.innerHTML = `
       <strong>${k}</strong>
       <ul>
-        ${data[k].size
+        ${
+          data[k].size
           ? [...data[k]].map(p => `<li>${p}</li>`).join("")
-          : "<li>Geen faseperiode in LV vermeld</li>"}
+          : "<li>Geen faseperiode in LV vermeld</li>"
+        }
       </ul>
     `;
     out.appendChild(div);
