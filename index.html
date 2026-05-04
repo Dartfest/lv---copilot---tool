@@ -2,132 +2,67 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV – Planstraße fasering uit LV</title>
+<title>LV test – alleen lezen</title>
 
-<!-- ✅ PDF.JS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/min.js</script>
+<!-- ✅ ENIGE LIBRARY -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
-<!-- ✅ JSPDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
 <style>
-body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
-.box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
-textarea { width:100%; min-height:160px; font-family:monospace; }
-button { padding:6px 12px; margin-right:6px; }
-
-.plan { padding:14px; border-left:8px solid #16a34a; border-radius:6px; margin-top:16px; }
-.warn { color:#b91c1c; font-weight:bold; }
-ul { margin-left:18px; }
+body { font-family: Arial, sans-serif; padding:20px; }
+textarea { width:100%; min-height:300px; font-family:monospace; }
+button { padding:6px 12px; margin-top:8px; }
+.status { margin-top:8px; font-weight:bold; }
+.ok { color:green; }
+.err { color:red; }
 </style>
 </head>
 
 <body>
 
-<h1>LV – Planstraße fasering (uit LV)</h1>
+<h1>LV‑PDF lezen (basischeck)</h1>
 
-<div class="box">
-  <h2>1. LV‑PDF(s)</h2>
-  <input type="file" id="lvFiles" multiple accept=".pdf"><br><br>
-  <button onclick="readLV()">Lees LV</button>
-  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
-</div>
+<input type="file" id="file" accept=".pdf"><br>
+<button onclick="lees()">Lees LV</button>
 
-<div class="box">
-  <h2>2. Analyse</h2>
-  <button onclick="analyse()">Analyseer</button>
-  <button onclick="exportPDF()">📄 Uitvoerders‑PDF</button>
-  <div id="output"></div>
-</div>
+<div id="status" class="status"></div>
+
+<textarea id="out" placeholder="LV‑tekst verschijnt hier..."></textarea>
 
 <script>
-/* === PDF LEZEN === */
-async function readPDF(file){
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-  let t = "";
-  for(let p=1;p<=pdf.numPages;p++){
-    const page = await pdf.getPage(p);
-    const c = await page.getTextContent();
-    t += c.items.map(i=>i.str).join(" ") + "\n";
+async function lees() {
+  const f = document.getElementById("file").files[0];
+  const status = document.getElementById("status");
+  const out = document.getElementById("out");
+
+  if (!f) {
+    alert("Kies eerst een PDF");
+    return;
   }
-  return t;
-}
 
-async function readLV(){
-  let t="";
-  for(const f of document.getElementById("lvFiles").files){
-    t += await readPDF(f);
-  }
-  document.getElementById("lvText").value = t;
-}
+  try {
+    const buf = await f.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
 
-/* === DATA === */
-let planData = {};
-const PLAN_REGEX = /Planstraße\s+([A-Z])/gi;
-const DATE_REGEX = /(von\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(t\/m|bis|-)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|(KW\s*\d+\s*(–|-)\s*\d+)/gi;
-
-/* === ANALYSE === */
-function analyse(){
-  planData = {};
-  const out = document.getElementById("output");
-  out.innerHTML = "";
-
-  const text = document.getElementById("lvText").value;
-  if(!text.trim()){ alert("LV leeg"); return; }
-
-  let m;
-  while((m = PLAN_REGEX.exec(text)) !== null){
-    const key = `Planstraße ${m[1]}`;
-    if(!planData[key]) planData[key] = new Set();
-
-    const frag = text.substring(m.index, m.index+800);
-    let d;
-    while((d = DATE_REGEX.exec(frag)) !== null){
-      planData[key].add(d[0]);
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const c = await page.getTextContent();
+      text += c.items.map(it => it.str).join(" ") + "\n";
     }
+
+    out.value = text;
+    status.textContent = "✅ LV succesvol gelezen";
+    status.className = "status ok";
+
+  } catch (e) {
+    status.textContent = "❌ Fout: " + e.message;
+    status.className = "status err";
+    console.error(e);
   }
-
-  Object.keys(planData).sort().forEach(k=>{
-    const el = document.createElement("div");
-    el.className = "plan";
-    el.innerHTML = `
-      <h3>${k}</h3>
-      <strong>Periode volgens LV</strong>
-      <ul>${planData[k].size ? [...planData[k]].map(p=>`<li>${p}</li>`).join("") : "<li>Geen tijdvak genoemd</li>"}</ul>
-    `;
-    out.appendChild(el);
-  });
-}
-
-/* === PDF EXPORT === */
-function exportPDF(){
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF();
-  let y = 10;
-
-  pdf.setFontSize(12);
-  pdf.text("Uitvoerderssamenvatting – fasering uit LV",10,y);
-  y+=10;
-  pdf.setFontSize(10);
-
-  Object.keys(planData).sort().forEach(k=>{
-    const txt = `
-${k}
-Periode:
-- ${planData[k].size ? [...planData[k]].join("\n- ") : "Geen tijdvak genoemd"}
-`;
-    const block = pdf.splitTextToSize(txt,180);
-    if(y+block.length*5>280){ pdf.addPage(); y=10; }
-    pdf.text(block,10,y);
-    y+=block.length*5+8;
-  });
-
-  pdf.save("uitvoerders_fasering_planstrassen.pdf");
 }
 </script>
 
