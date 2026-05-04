@@ -2,272 +2,81 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LV Copilot Tool – Projectbrede Werkvoorbereiding Infra</title>
+<title>LV Copilot Tool – Integrale Werkvoorbereiding Infra</title>
 
 <!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
+<!-- jsPDF -->
+https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js
 
 <style>
 body { font-family: Arial, sans-serif; background:#f5f7fa; padding:20px; }
-h1,h2 { margin-top:0 }
+.box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
 textarea { width:100%; min-height:200px; font-family:monospace; padding:10px; }
-button {
-  padding:8px 14px;
-  background:#2563eb;
-  color:white;
-  border:none;
-  border-radius:4px;
-  cursor:pointer;
-  margin:6px 4px 6px 0;
-}
+button { padding:8px 14px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
 button.secondary { background:#6b7280; }
-.box {
-  background:white;
-  padding:16px;
-  border-radius:6px;
-  margin-bottom:20px;
-}
-.chunk {
-  padding:12px;
-  border-radius:6px;
-  margin-bottom:12px;
-}
+.chunk { padding:12px; border-radius:6px; margin-bottom:12px; }
 .red { background:#fee2e2; border-left:6px solid #dc2626; }
 .orange { background:#ffedd5; border-left:6px solid #ea580c; }
 .green { background:#dcfce7; border-left:6px solid #16a34a; }
 .small { font-size:12px; color:#555; }
-ul { margin-left:18px; }
 </style>
 </head>
 
 <body>
 
 <h1>LV Copilot Tool – Integrale Werkvoorbereiding Infra</h1>
-<p class="small">
-Meerdere LV + bijlagen + K&L → één analyse → calculatie & uitvoering
-</p>
 
-<!-- 1. LV + bijlagen -->
 <div class="box">
-<h2>1. LV + bijlagen upload (meerdere PDF’s)</h2>
-<p class="small">
-Upload hier alle relevante LV‑delen, bestekbijlagen, toelichtingen.
-Alles wordt samengevoegd tot één LV‑basis.
-</p>
+<h2>1. LV + bijlagen (meerdere PDF’s)</h2>
 <input type="file" id="lvFiles" multiple accept=".pdf">
-<button class="secondary" onclick="readLVFiles()">Lees LV‑bestanden</button>
+<button class="secondary" onclick="readLVFiles()">Lees LV</button>
 </div>
 
-<!-- 2. Samengevoegde LV tekst -->
 <div class="box">
-<h2>2. Samengevoegde LV‑tekst (projectbreed)</h2>
-<textarea id="lvtext" placeholder="Samengevoegde LV‑tekst verschijnt hier..."></textarea>
-<button class="secondary" onclick="splitIntoChunks()">Splits in Copilot‑delen</button>
+<h2>2. Samengevoegde LV‑tekst</h2>
+<textarea id="lvtext"></textarea>
+<button class="secondary" onclick="splitIntoChunks()">Analyseer LV</button>
 </div>
 
-<!-- 3. Copilot delen -->
 <div class="box">
-<h2>3. Copilot‑delen (werkvoorbereiding)</h2>
-<div id="chunks"></div>
-</div>
-
-<!-- 4. Kabels & Leidingen -->
-<div class="box">
-<h2>4. Kabels & Leidingen (KLIC / netbeheerders / bijlagen)</h2>
-<p class="small">
-Upload meerdere bestanden. De tool maakt één projectbreed K&L‑overzicht.
-</p>
+<h2>3. Kabels & Leidingen (projectbreed)</h2>
 <input type="file" id="klFiles" multiple>
-<button class="secondary" onclick="readKLFiles()">Lees K&L‑bestanden</button>
-<div id="klOverview"></div>
+<button class="secondary" onclick="readKLFiles()">Lees K&L</button>
+<div id="klData"></div>
+</div>
+
+<div class="box">
+<h2>4. LV‑delen met K&L‑koppeling</h2>
+<div id="chunks"></div>
+<button onclick="exportPDF()">Export uitvoerder‑PDF</button>
 </div>
 
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-const lvtext = document.getElementById("lvtext");
-const chunksDiv = document.getElementById("chunks");
+let KL_TEXT = "";
 
-/* ================= LV + BIJLAGEN (MEERDERE PDF'S) ================= */
-async function readLVFiles() {
-  const files = document.getElementById("lvFiles").files;
-  if (!files.length) { alert("Geen LV‑bestanden gekozen"); return; }
-
-  let fullText = "";
-  let count = 0;
-
-  for (let f of files) {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const pdf = await pdfjsLib.getDocument(new Uint8Array(reader.result)).promise;
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const c = await page.getTextContent();
-        fullText += c.items.map(it=>it.str).join(" ") + "\n";
-      }
-      count++;
-      if (count === files.length) {
-        lvtext.value = fullText;
-      }
-    };
-    reader.readAsArrayBuffer(f);
+async function readLVFiles(){
+  const files = lvFiles.files;
+  let txt="";
+  for(const f of files){
+    const r=new FileReader();
+    await new Promise(res=>{
+      r.onload=async()=>{
+        const pdf=await pdfjsLib.getDocument(new Uint8Array(r.result)).promise;
+        for(let i=1;i<=pdf.numPages;i++){
+          const p=await pdf.getPage(i);
+          const c=await p.getTextContent();
+          txt+=c.items.map(it=>it.str).join(" ")+"\n";
+        }
+        res();
+      };
+      r.readAsArrayBuffer(f);
+    });
   }
+  lvtext.value=txt;
 }
 
-/* ================= LV → COPILOT DELEN ================= */
-function splitIntoChunks(){
-  chunksDiv.innerHTML="";
-  const MAX=3500;
-  const parts = lvtext.value.match(new RegExp("[\\s\\S]{1,"+MAX+"}","g")) || [];
-
-  parts.forEach((part,i)=>{
-    const a = analyseLV(part);
-
-    const prompt =
-`ROL
-Jij bent mijn ZEER ERVAREN digitale werkvoorbereider voor Duitse en Nederlandse
-grond-, weg- en rioleringswerken (Tiefbau / Infra).
-
-VASTE STRUCTUUR
-1. Betekenis in normaal Nederlands
-2. Technische kern
-3. Uitvoering (praktijk)
-4. Werkvoorbereiding – calculatiefase
-5. Werkvoorbereiding – na gunning
-6. Risico’s, knelpunten en bestellingen
-   6A. Risico’s
-   6B. Knelpunten
-   6C. Bestellen & vastleggen
-7. Uitvoerder‑checklist
-
-REGELS
-- Geen aannames
-- Faalkosten‑gericht
-- Praktisch uitvoerbaar
-
-LV‑DEEL
-${part}`;
-
-    const d=document.createElement("div");
-    d.className=`chunk ${a.level}`;
-    d.innerHTML=`
-<strong>DEEL ${i+1}/${parts.length}</strong><br>
-<strong>Risico’s:</strong> ${a.risico.join(", ")||"–"}<br>
-<strong>Knelpunten:</strong> ${a.knelpunt.join(", ")||"–"}<br>
-<strong>Bestellen / vastleggen:</strong> ${a.bestellen.join(", ")||"–"}<br><br>
-
-<pre style="white-space:pre-wrap">${part}</pre>
-<button onclick='navigator.clipboard.writeText(${JSON.stringify(prompt)})'>
-Kopieer Copilot‑prompt
-</button>`;
-    chunksDiv.appendChild(d);
-  });
-}
-
-/* ================= ANALYSE LV ================= */
-function analyseLV(t){
-  t=t.toLowerCase();
-  const risico=[], knelpunt=[], bestellen=[];
-  let level="green";
-
-  if(t.includes("vertrag")||t.includes("freigabe"))
-    risico.push("Contractuele afhankelijkheden");
-
-  if(t.includes("abweich")||t.includes("meerwerk"))
-    risico.push("Meerwerkpotentieel");
-
-  if(t.includes("kabel")||t.includes("leitung"))
-    knelpunt.push("Aanwezige kabels & leidingen");
-
-  if(t.includes("verkehr")||t.includes("umleitung"))
-    knelpunt.push("Verkeersmaatregelen beperken productie");
-
-  if(t.includes("prüfung")||t.includes("keuring"))
-    knelpunt.push("Extra kwaliteitsmomenten");
-
-  if(t.includes("liefer")||t.includes("material"))
-    bestellen.push("Materialen");
-
-  if(t.includes("gerät")||t.includes("kran"))
-    bestellen.push("Materieel");
-
-  if(risico.length>0) level="red";
-  else if(knelpunt.length>0) level="orange";
-
-  return { risico, knelpunt, bestellen, level };
-}
-
-/* ================= KABELS & LEIDINGEN ================= */
-function readKLFiles() {
-  const files = document.getElementById("klFiles").files;
-  if (!files.length) { alert("Geen K&L bestanden gekozen"); return; }
-
-  let fullText = "";
-  let count = 0;
-
-  for (let f of files) {
-    const r = new FileReader();
-    r.onload = e => {
-      fullText += "\n" + e.target.result;
-      count++;
-      if (count === files.length) analyseKL(fullText);
-    };
-    r.readAsText(f);
-  }
-}
-
-function analyseKL(text){
-  text=text.toLowerCase();
-  const nets={
-    elektra:text.includes("elektra"),
-    gas:text.includes("gas"),
-    water:text.includes("water"),
-    telecom:text.includes("telecom")||text.includes("glasvezel"),
-    riool:text.includes("riool"),
-    warmte:text.includes("warmte")
-  };
-
-  const aanwezig=Object.keys(nets).filter(n=>nets[n]);
-  const knelpunten=[];
-
-  if(aanwezig.length>2)
-    knelpunten.push("Meerdere netten → beperkte graafruimte");
-
-  if(nets.gas)
-    knelpunten.push("Gasleiding → veiligheidszones, handmatig werk");
-
-  if(nets.elektra)
-    knelpunten.push("Elektra → spanningsrisico, netbeheerder betrekken");
-
-  if(!knelpunten.length)
-    knelpunten.push("Geen expliciete knelpunten gedetecteerd (geen aannames)");
-
-  renderKL(aanwezig, knelpunten);
-}
-
-function renderKL(aanwezig, knelpunten){
-  const div=document.getElementById("klOverview");
-  div.innerHTML=`
-<div class="chunk orange">
-<strong>Aanwezige kabels & leidingen (projectbreed):</strong><br>
-${aanwezig.join(", ")||"–"}<br><br>
-
-<strong>Knelpunten uitvoering:</strong>
-<ul>${knelpunten.map(k=>`<li>${k}</li>`).join("")}</ul>
-
-<strong>Werkvoorbereiding – acties:</strong>
-<ul>
-<li>KLIC + bijlagen volledig controleren</li>
-<li>Geen aannames over ligging of diepte</li>
-<li>Proefsleuven overwegen</li>
-<li>Netbeheerders tijdig afstemmen</li>
-<li>Productie en planning aanpassen</li>
-</ul>
-</div>`;
-}
-</script>
-
-</body>
-</html>
+function readKLFiles(){
