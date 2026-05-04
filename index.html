@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse PRO++</title>
+<title>LV Analyse PRO (Tender Tool)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -14,12 +14,13 @@ button { padding:8px 14px; margin:6px; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .section { background:#fff; border-left:5px solid #2563eb; padding:15px; margin:10px 0; }
 .risk { color:#b91c1c; font-weight:bold; }
+h3 { margin-top:0; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse PRO++</h1>
+<h1>LV Analyse PRO (Tenderniveau)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -33,11 +34,10 @@ button { padding:8px 14px; margin:6px; }
 
 <script>
 
-// ===== CONFIG (optioneel AI) =====
-// zet hier je OpenAI key als je wil upgraden
-const OPENAI_API_KEY = ""; 
+// ===== OPTIONELE AI =====
+const OPENAI_API_KEY = ""; // optioneel
 
-// ===== PDF =====
+// ===== PDF INLEZEN =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -58,52 +58,99 @@ async function leesLV(){
 // ===== ANALYSE DATA =====
 let analyseData = {};
 
-// ===== BASIS ANALYSE =====
-function baseAnalyse(text){
+// ===== BASIS DETECTIE =====
+function analyseTekst(text){
 
   text = text.toLowerCase();
 
   const werk = [];
   if(text.includes("kanal")) werk.push("Riolering");
-  if(text.includes("kabel") || text.includes("leitung")) werk.push("Kabels/leidingen");
-  if(text.includes("straße")) werk.push("Infrastructuur");
+  if(text.includes("kabel") || text.includes("leitung")) werk.push("Kabels en leidingen");
+  if(text.includes("straße")) werk.push("Infrastructuur / bouwwegen");
   if(text.includes("versorgung")) werk.push("Nutsvoorzieningen");
-
-  const beperkingen = [];
-  if(text.includes("nicht parallel")) beperkingen.push("Geen parallel werk");
-  if(text.includes("ohne unterbrechung")) beperkingen.push("Continu uitvoeren");
-  if(text.includes("zeitvorgaben")) beperkingen.push("Strikte planning");
-
-  const afhankelijk = [];
-  if(text.includes("drittfirmen")) afhankelijk.push("Derden (nutsbedrijven)");
 
   const planning = text.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+\d{4}/gi) || [];
 
-  return { werk, beperkingen, afhankelijk, planning };
+  const fasering = [];
+  const faseRegex = /(\d+)\.\s*bauabschnitt.*?planstraße\s+([a-z])/gi;
+  let m;
+  while((m=faseRegex.exec(text))){
+    fasering.push(`Fase ${m[1]} - Planstraße ${m[2].toUpperCase()}`);
+  }
+
+  const beperkingen = [];
+  if(text.includes("nicht parallel")) beperkingen.push("Geen parallel werk toegestaan");
+  if(text.includes("ohne unterbrechung")) beperkingen.push("Continu uitvoeren verplicht");
+  if(text.includes("zeitvorgaben")) beperkingen.push("Strikte tijdseisen");
+
+  const afhankelijk = [];
+  if(text.includes("drittfirmen")) afhankelijk.push("Derden (nutsbedrijven)");
+  if(text.includes("koord") || text.includes("abstimmung")) afhankelijk.push("Coördinatie tussen partijen vereist");
+
+  const contract = [];
+  if(text.includes("nicht vergütet")) contract.push("Kosten niet apart vergoed");
+  if(text.includes("einzuplanen")) contract.push("Aannemer draagt planningsverantwoordelijkheid");
+  if(text.includes("verbindlich")) contract.push("Bindende planning vereist");
+
+  return { werk, planning, fasering, beperkingen, afhankelijk, contract };
 }
 
 // ===== RISICO ENGINE =====
-function buildRisico(data){
+function analyseRisico(data){
 
-  let r=[];
+  let r = {
+    planning: [],
+    contract: [],
+    uitvoering: [],
+    omgeving: []
+  };
 
   if(data.beperkingen.length)
-    r.push("Beperkingen verhogen planningsdruk en kans op vertraging");
-
-  if(data.afhankelijk.length)
-    r.push("Afhankelijkheid van derden vormt grootste uitvoeringsrisico");
+    r.planning.push("Beperkingen zorgen voor verhoogde planningsdruk");
 
   if(data.planning.length > 2)
-    r.push("Langlopende planning verhoogt faalkans en afstemmingscomplexiteit");
+    r.planning.push("Langdurige planning verhoogt kans op vertraging");
 
-  if(r.length===0)
-    r.push("Algemene uitvoeringsrisico's aanwezig");
+  if(data.contract.length)
+    r.contract.push("Contract legt risico’s bij aannemer");
+
+  if(data.contract.some(c => c.includes("niet")))
+    r.contract.push("Kostenrisico door niet-vergoede werkzaamheden");
+
+  if(data.afhankelijk.length)
+    r.omgeving.push("Afhankelijk van derden (nutsbedrijven)");
+
+  if(data.afhankelijk.length)
+    r.uitvoering.push("Afstemming tussen partijen kritisch");
+
+  if(data.beperkingen.includes("Geen parallel werk toegestaan"))
+    r.uitvoering.push("Fasering verlengt doorlooptijd");
 
   return r;
 }
 
-// ===== AI SAMENVATTING =====
-async function aiSamenvatting(text){
+// ===== SAMENVATTING =====
+function buildSamenvatting(data){
+
+  return `
+  Het project omvat ${data.werk.join(", ") || "diverse civiele werkzaamheden"}.
+  
+  De werkzaamheden worden uitgevoerd ${data.fasering.length ? "in meerdere fasen" : "zonder expliciete fasering"}.
+  
+  De planning bevat referenties naar ${data.planning.join(", ") || "geen duidelijke periode"}.
+  
+  Er gelden belangrijke randvoorwaarden zoals ${data.beperkingen.join(", ") || "beperkte beperkingen"}.
+  
+  Daarnaast is er sprake van afhankelijkheden (${data.afhankelijk.join(", ") || "beperkt"}), wat directe invloed heeft op de uitvoerbaarheid.
+  
+  Contractueel ligt een belangrijk deel van de verantwoordelijkheid bij de aannemer, met name ten aanzien van planning en kostenbeheersing.
+  
+  De uitvoering vereist daarom een strakke planning, intensieve coördinatie en risicobeheersing.
+  `;
+}
+
+// ===== AI (OPTIONEEL) =====
+async function aiAnalyse(text){
 
   if(!OPENAI_API_KEY) return null;
 
@@ -118,11 +165,11 @@ async function aiSamenvatting(text){
       messages:[
         {
           role:"system",
-          content:"Je bent een civieltechnisch werkvoorbereider. Analyseer dit LV professioneel."
+          content:"Je bent een senior werkvoorbereider. Analyseer dit LV volledig."
         },
         {
           role:"user",
-          content:`Geef een professionele samenvatting + risico analyse:\n\n${text}`
+          content:`Maak een uitgebreide samenvatting + risicoanalyse:\n\n${text}`
         }
       ]
     })
@@ -139,46 +186,43 @@ async function analyse(){
   const out = document.getElementById("result");
   out.innerHTML="Analyseren...";
 
-  const base = baseAnalyse(raw);
-  const risico = buildRisico(base);
+  const data = analyseTekst(raw);
+  const risico = analyseRisico(data);
 
-  let samenvatting = await aiSamenvatting(raw);
-
-  // fallback zonder AI
-  if(!samenvatting){
-    samenvatting = `
-    Dit project omvat werkzaamheden zoals ${base.werk.join(", ")}.
-    De uitvoering kent beperkingen (${base.beperkingen.join(", ") || "geen expliciete"}) 
-    en afhankelijkheden (${base.afhankelijk.join(", ") || "beperkt"}).
-    De planning bevat elementen zoals ${base.planning.join(", ") || "onduidelijk"}.
-    Dit vraagt om strakke coördinatie en planning.
-    `;
-  }
+  let samenvatting = await aiAnalyse(raw);
+  if(!samenvatting) samenvatting = buildSamenvatting(data);
 
   analyseData = { samenvatting, risico };
 
   out.innerHTML = `
+
   <div class="section">
-    <h3>Uitgebreide samenvatting</h3>
+    <h3>Samenvatting</h3>
     <p>${samenvatting}</p>
   </div>
 
   <div class="section">
-    <h3>Risico analyse</h3>
-    <ul class="risk">
-      ${risico.map(r=>`<li>${r}</li>`).join("")}
-    </ul>
+    <h3>Risico Analyse</h3>
+
+    <b>Planning</b>
+    <ul class="risk">${risico.planning.map(r=>`<li>${r}</li>`).join("")}</ul>
+
+    <b>Contract</b>
+    <ul class="risk">${risico.contract.map(r=>`<li>${r}</li>`).join("")}</ul>
+
+    <b>Uitvoering</b>
+    <ul class="risk">${risico.uitvoering.map(r=>`<li>${r}</li>`).join("")}</ul>
+
+    <b>Omgeving / derden</b>
+    <ul class="risk">${risico.omgeving.map(r=>`<li>${r}</li>`).join("")}</ul>
+
   </div>
+
   `;
 }
 
 // ===== PDF =====
 function exportPDF(){
-
-  if(!analyseData.samenvatting){
-    alert("Eerst analyseren");
-    return;
-  }
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
@@ -201,12 +245,14 @@ function exportPDF(){
   doc.text("Risico's",10,y);
   y+=6;
 
-  analyseData.risico.forEach(r=>{
-    doc.text("- "+r,10,y);
-    y+=5;
+  Object.values(analyseData.risico).forEach(arr=>{
+    arr.forEach(r=>{
+      doc.text("- "+r,10,y);
+      y+=5;
+    });
   });
 
-  doc.save("LV_Analyse_Pro.pdf");
+  doc.save("LV_Analyse_Tender.pdf");
 }
 
 </script>
