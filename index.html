@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>LV + K&L Werkvoorbereiding Infra</title>
 
-<!-- PDF.js correct -->
+<!-- ✅ PDF.js CORRECT GELADEN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -15,7 +15,7 @@
 body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
 h1,h2,h3 { margin-top:0 }
-textarea { width:100%; min-height:180px; font-family:monospace; padding:10px; }
+textarea { width:100%; min-height:160px; font-family:monospace; padding:10px; }
 button { padding:6px 12px; margin-top:6px; }
 .chunk { padding:14px; border-radius:6px; margin-top:16px; }
 .green { background:#dcfce7; border-left:6px solid #16a34a; }
@@ -23,17 +23,17 @@ button { padding:6px 12px; margin-top:6px; }
 .red { background:#fee2e2; border-left:6px solid #dc2626; }
 pre { white-space:pre-wrap; background:#f9fafb; padding:10px; }
 ul { margin-left:18px; }
+.badge { font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h1>LV + K&L – Werkvoorbereiding Infra</h1>
+<h1>LV + K&amp;L – Werkvoorbereiding Infra</h1>
 
 <div class="box">
   <h2>1. LV‑PDF(s)</h2>
   <input type="file" id="lvFiles" multiple accept=".pdf">
-  <br>
   <button onclick="readLV()">Lees LV</button>
   <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
@@ -41,7 +41,6 @@ ul { margin-left:18px; }
 <div class="box">
   <h2>2. Kabels & Leidingen (PDF / TXT)</h2>
   <input type="file" id="klFiles" multiple accept=".pdf,.txt">
-  <br>
   <button onclick="readKL()">Lees K&amp;L</button>
   <textarea id="klText" placeholder="K&amp;L‑tekst verschijnt hier..."></textarea>
 </div>
@@ -53,6 +52,7 @@ ul { margin-left:18px; }
 </div>
 
 <script>
+/* ===== PDF lezen ===== */
 async function readPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -65,12 +65,14 @@ async function readPDF(file) {
   return text;
 }
 
+/* ===== LV ===== */
 async function readLV() {
   let t = "";
   for (const f of lvFiles.files) t += await readPDF(f);
   lvText.value = t;
 }
 
+/* ===== K&L ===== */
 async function readKL() {
   let t = "";
   for (const f of klFiles.files) {
@@ -80,6 +82,7 @@ async function readKL() {
   klText.value = t.toLowerCase();
 }
 
+/* ===== Analyse ===== */
 function analyseLV() {
   output.innerHTML = "";
   const parts = lvText.value.match(/[\s\S]{1,3000}/g) || [];
@@ -88,6 +91,7 @@ function analyseLV() {
   parts.forEach((p, i) => {
     const t = (p + kl).toLowerCase();
 
+    /* Netten */
     const netten = [];
     if (t.includes("gas")) netten.push("Gas");
     if (t.includes("elektra")) netten.push("Elektra");
@@ -95,48 +99,60 @@ function analyseLV() {
     if (t.includes("telecom") || t.includes("glasvezel")) netten.push("Telecom");
     if (t.includes("riool")) netten.push("Riool");
 
-    let cls="green", impact="LAAG", conclusie="";
+    /* Impact */
+    let cls="green", impact="LAAG", fase="Normale uitvoering";
     if (netten.includes("Gas") || netten.includes("Elektra")) {
-      cls="red"; impact="HOOG";
-    } else if (netten.length>1) {
-      cls="orange"; impact="MIDDEL";
+      cls="red"; impact="HOOG"; fase="Handmatig / gefaseerd";
+    } else if (netten.length > 1) {
+      cls="orange"; impact="MIDDEL"; fase="Productiebeperking";
     }
 
-    conclusie =
-      netten.length===0
-      ? "Geen kabels en leidingen bekend die de uitvoering beperken."
-      : "Aanwezige kabels en leidingen bepalen de werkwijze. Handmatig werken, fasering en afstemming met netbeheerders zijn noodzakelijk. Productiesnelheid neemt af en meerwerkpotentieel is aanwezig.";
+    /* Meerwerk-trigger */
+    let meerwerk="❌ Geen direct meerwerkpotentieel";
+    if (netten.length > 0) meerwerk="⚠️ Meerwerk mogelijk (K&amp;L)";
+    if (netten.includes("Gas") || netten.includes("Elektra"))
+      meerwerk="✅ Meerwerk waarschijnlijk (veiligheid / handmatig werk)";
+    if (t.includes("meerwerk") || t.includes("abweich"))
+      meerwerk="✅ Meerwerk expliciet genoemd in LV";
 
-    const d = document.createElement("div");
-    d.className = `chunk ${cls}`;
-    d.innerHTML = `
+    const d=document.createElement("div");
+    d.className=`chunk ${cls}`;
+    d.innerHTML=`
 <h3>LV‑DEEL ${i+1}</h3>
 
 <strong>Kabels & leidingen:</strong> ${netten.join(", ")||"–"}<br>
-<strong>Impact:</strong> ${impact}
+<strong>Impact:</strong> ${impact} – ${fase}<br>
+<strong>Meerwerk‑trigger:</strong> <span class="badge">${meerwerk}</span>
 
-<h4>🔹 Voorbereidingsfase</h4>
+<h4>🔹 Voorbereidingsfase – te regelen / bestellen</h4>
 <ul>
-  <li>KLIC en aanvullende gegevens controleren</li>
-  <li>Netbeheerders tijdig informeren</li>
-  <li>Proefsleuven overwegen</li>
+  <li>KLIC + aanvullende K&amp;L‑gegevens</li>
+  <li>Afstemming netbeheerders</li>
+  <li>Vergunningen / verkeersmaatregelen</li>
+  ${netten.length ? "<li>Proefsleuven overwegen</li>" : ""}
 </ul>
 
-<h4>🔹 Uitvoeringsfase</h4>
+<h4>🔹 Uitvoeringsfase – te bestellen / inzetten</h4>
 <ul>
-  <li>Handmatig graven waar vereist</li>
-  <li>Werken in korte vakken / fasering</li>
-  <li>Extra toezicht bij gas en elektra</li>
+  <li>Materieel (kraan, klein materieel)</li>
+  <li>Materialen volgens LV</li>
+  ${netten.length ? "<li>Bescherm- en veiligheidsmiddelen</li>" : ""}
 </ul>
 
-<h4>🔹 Afronding / nazorg</h4>
+<h4>🔹 Afrondingsfase – controle / vastlegging</h4>
 <ul>
-  <li>Herstel schade nabij kabels en leidingen</li>
-  <li>Oplevercontrole en documentatie</li>
+  <li>Keuringen en oplevercontroles</li>
+  <li>Herstel omgeving en sleuven</li>
+  <li>Revisie / vastlegging</li>
 </ul>
 
 <h4>📌 Conclusie K&amp;L‑knelpunten</h4>
-<p>${conclusie}</p>
+<p>
+${netten.length
+  ? "Aanwezige kabels en leidingen beïnvloeden de werkwijze. Verwacht lagere productie, handmatig werk en afstemming met netbeheerders. Meerwerkpotentieel is aanwezig."
+  : "Geen bekende kabels en leidingen die de uitvoering beperken."
+}
+</p>
 
 <pre>${p}</pre>
 `;
@@ -147,3 +163,4 @@ function analyseLV() {
 
 </body>
 </html>
+``
