@@ -91,17 +91,30 @@ function parseDate(d) {
   if (p.length !== 3) return null;
   return new Date(p[2], p[1] - 1, p[0]);
 }
-
+<script>
 function analyse() {
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("result");
   out.innerHTML = "";
 
+  if (!text.trim()) {
+    out.textContent = "Geen LV-tekst beschikbaar.";
+    return;
+  }
+
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
-  const exactRegex =
-    /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(bis|–|-|t\/m)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
-  const tekstRegex =
-    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|KW\s*\d+\s*(–|-)\s*\d+)/gi;
+
+  // 1. Exact: 15.05.2024 – 31.05.2024
+  const exactRange =
+    /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(–|-|t\/m|bis)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
+
+  // 2. Vom … bis …
+  const vomBis =
+    /vom\s+(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s+bis\s+(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
+
+  // 3. Overige LV-tijdvakken
+  const overige =
+    /(KW\s*\d+\s*(–|-)\s*\d+|ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
 
   const data = {};
   let m;
@@ -109,67 +122,74 @@ function analyse() {
   while ((m = planRegex.exec(text)) !== null) {
     const plan = "Planstraße " + m[2];
     if (!data[plan]) {
-      data[plan] = { periodes: [], start: null, end: null };
+      data[plan] = {
+        periodes: [],
+        start: null,
+        end: null
+      };
     }
 
-    const fragment = text.slice(m.index, m.index + 1500);
+    const frag = text.substring(m.index, m.index + 1500);
     let p;
 
-    while ((p = exactRegex.exec(fragment)) !== null) {
+    // Exacte datums
+    while ((p = exactRange.exec(frag)) !== null) {
       data[plan].periodes.push(p[0]);
-      const s = parseDate(p[1]);
-      const e = parseDate(p[3]);
-      if (s && (!data[plan].start || s < data[plan].start)) data[plan].start = s;
-      if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
+      const s = new Date(p[1].split(/[.\-]/).reverse().join("-"));
+      const e = new Date(p[2].split(/[.\-]/).reverse().join("-"));
+      if (!data[plan].start || s < data[plan].start) data[plan].start = s;
+      if (!data[plan].end   || e > data[plan].end)   data[plan].end   = e;
     }
 
-    while ((p = tekstRegex.exec(fragment)) !== null) {
+    // vom … bis …
+    while ((p = vomBis.exec(frag)) !== null) {
+      data[plan].periodes.push("vom " + p[1] + " bis " + p[2]);
+      const s = new Date(p[1].split(/[.\-]/).reverse().join("-"));
+      const e = new Date(p[2].split(/[.\-]/).reverse().join("-"));
+      if (!data[plan].start || s < data[plan].start) data[plan].start = s;
+      if (!data[plan].end   || e > data[plan].end)   data[plan].end   = e;
+    }
+
+    // Overig
+    while ((p = overige.exec(frag)) !== null) {
       if (!data[plan].periodes.includes(p[0])) {
         data[plan].periodes.push(p[0]);
       }
     }
   }
 
-  let index = 1;
-  for (const [plan, d] of Object.entries(data)) {
+  Object.entries(data).forEach(([plan, d], i) => {
     const div = document.createElement("div");
     div.className = "plan";
 
-    let periodeBlok;
-    let samenvatting;
+    const periodeTekst =
+      d.start && d.end
+        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
+        : `<p class="muted">Geen exact datum‑tijdvak vastgelegd</p>`;
 
-    if (d.start && d.end) {
-      periodeBlok = `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`;
-      samenvatting = `
-        <p>
-          <strong>Samenvatting:</strong><br>
-          ${plan} wordt uitgevoerd in de periode van
-          ${d.start.toLocaleDateString()} tot en met
-          ${d.end.toLocaleDateString()}.
-          De onderstaande tijdvakken zijn letterlijk overgenomen uit het LV.
-        </p>`;
-    } else {
-      periodeBlok = `<p class="muted">Geen exact datum‑tijdvak in LV vermeld</p>`;
-      samenvatting = `
-        <p>
-          <strong>Samenvatting:</strong><br>
-          Voor ${plan} is in het LV geen exact start‑ en eindmoment opgenomen.
-          De uitvoering is gekoppeld aan globale of indicatieve periodes zoals hieronder vermeld.
-        </p>`;
-    }
+    const samenvatting =
+      d.start && d.end
+        ? `<p><strong>Samenvatting:</strong><br>
+           ${plan} wordt uitgevoerd tussen ${d.start.toLocaleDateString()}
+           en ${d.end.toLocaleDateString()}, conform onderstaande LV-vermeldingen.
+           </p>`
+        : `<p><strong>Samenvatting:</strong><br>
+           Voor ${plan} bevat het LV geen exact start- en eindmoment.
+           De werkzaamheden zijn gekoppeld aan globale of indicatieve periodes.
+           </p>`;
 
     div.innerHTML = `
-      <strong>${index}. ${plan}</strong>
-      ${periodeBlok}
+      <strong>${i + 1}. ${plan}</strong>
+      ${periodeTekst}
       ${samenvatting}
       <ul>${d.periodes.map(x => `<li>${x}</li>`).join("")}</ul>
     `;
-
     out.appendChild(div);
-    index++;
-  }
+  });
 }
 </script>
+``
+
 
 </body>
 </html>
