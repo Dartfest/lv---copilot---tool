@@ -2,82 +2,103 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV LEEST ZEKER</title>
+<title>LV – Planstraße fasen uit LV</title>
 
-<!-- ✅ PDF.js – CORRECTE SCRIPT TAG -->
+<!-- ✅ PDF.js – CORRECT en BEWEZEN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-  // Worker expliciet instellen
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
 <style>
-body { font-family: Arial, sans-serif; padding:20px; }
-textarea { width:100%; min-height:300px; font-family:monospace; }
-button { padding:6px 12px; margin-top:8px; }
-.status-ok { color:green; font-weight:bold; }
-.status-err { color:red; font-weight:bold; }
+body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
+h1 { margin-top:0; }
+.box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
+textarea { width:100%; min-height:260px; font-family:monospace; }
+button { padding:6px 12px; margin-top:6px; margin-right:6px; }
+.plan { margin-top:12px; padding:12px; border-left:6px solid #2563eb; background:#eff6ff; }
 </style>
 </head>
 
 <body>
 
-<h1>LV lezen – definitieve controle</h1>
+<h1>LV – Planstraße fasering (uit LV)</h1>
 
-<p id="libStatus"></p>
+<div class="box">
+  <h2>1. LV lezen</h2>
+  <input type="file" id="file" accept=".pdf"><br>
+  <button onclick="leesLV()">Lees LV</button>
+  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
+</div>
 
-<input type="file" id="file" accept=".pdf"><br>
-<button onclick="leesLV()">Lees LV</button>
-
-<p id="status"></p>
-
-<textarea id="output" placeholder="LV‑tekst verschijnt hier..."></textarea>
+<div class="box">
+  <h2>2. Analyse Planstraßen</h2>
+  <button onclick="analyse()">Analyseer</button>
+  <div id="output"></div>
+</div>
 
 <script>
-// ✅ HARD CHECK BIJ LADEN
-window.addEventListener("load", () => {
-  const s = document.getElementById("libStatus");
-  if (window.pdfjsLib) {
-    s.textContent = "✅ pdf.js is correct geladen";
-    s.className = "status-ok";
-  } else {
-    s.textContent = "❌ pdf.js IS NIET GELADEN";
-    s.className = "status-err";
-  }
-});
-
-// ✅ LV LEZEN
 async function leesLV() {
   const f = document.getElementById("file").files[0];
-  const status = document.getElementById("status");
-  const out = document.getElementById("output");
+  if (!f) { alert("Kies eerst een PDF"); return; }
 
-  if (!f) {
-    alert("Kies eerst een PDF");
+  const buf = await f.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
+  let text = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const c = await page.getTextContent();
+    text += c.items.map(it => it.str).join(" ") + "\n";
+  }
+
+  document.getElementById("lvText").value = text;
+}
+
+function analyse() {
+  const text = document.getElementById("lvText").value;
+  const out = document.getElementById("output");
+  out.innerHTML = "";
+
+  if (!text.trim()) {
+    alert("LV is leeg – eerst LV lezen");
     return;
   }
 
-  try {
-    const buf = await f.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const planRegex = /Planstraße\s+([A-Z])/gi;
+  const dateRegex =
+    /(von\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(t\/m|bis|-)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (KW\s*\d+\s*(–|-)\s*\d+)/gi;
 
-    let text = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(it => it.str).join(" ") + "\n";
+  const data = {};
+  let m;
+
+  while ((m = planRegex.exec(text)) !== null) {
+    const key = `Planstraße ${m[1]}`;
+    if (!data[key]) data[key] = new Set();
+
+    const frag = text.substring(m.index, m.index + 900);
+    let d;
+    while ((d = dateRegex.exec(frag)) !== null) {
+      data[key].add(d[0]);
     }
-
-    out.value = text;
-    status.textContent = "✅ LV succesvol gelezen";
-    status.className = "status-ok";
-
-  } catch (e) {
-    console.error(e);
-    status.textContent = "❌ Fout bij lezen: " + e.message;
-    status.className = "status-err";
   }
+
+  Object.keys(data).sort().forEach(k => {
+    const div = document.createElement("div");
+    div.className = "plan";
+    div.innerHTML = `
+      <strong>${k}</strong>
+      <ul>
+        ${data[k].size
+          ? [...data[k]].map(p => `<li>${p}</li>`).join("")
+          : "<li>Geen faseperiode in LV vermeld</li>"}
+      </ul>
+    `;
+    out.appendChild(div);
+  });
 }
 </script>
 
