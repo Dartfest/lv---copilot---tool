@@ -2,62 +2,26 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>LV – Planstraße samenvatting</title>
+  <title>LV – stabiele basis</title>
 
   <!-- pdf.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      background: #f4f6f8;
-    }
-    textarea {
-      width: 100%;
-      height: 260px;
-      font-family: monospace;
-      white-space: pre-wrap;
-    }
-    button {
-      padding: 6px 12px;
-      margin: 6px 0;
-    }
-    .box {
-      background: #fff;
-      padding: 16px;
-      border-radius: 6px;
-      margin-bottom: 16px;
-    }
-    .plan {
-      border-left: 4px solid #2563eb;
-      background: #eff6ff;
-      padding: 10px;
-      margin: 10px 0;
-    }
-    .muted {
-      color: #555;
-      font-size: 0.9em;
-    }
+    body { font-family: Arial, sans-serif; padding:20px; }
+    textarea { width:100%; height:300px; font-family:monospace; white-space:pre-wrap; }
+    button { padding:6px 12px; margin:6px 0; }
   </style>
 </head>
 
 <body>
 
-<h1>LV – Planstraße samenvatting & tijdvakken</h1>
+<h1>LV – stabiele basis</h1>
 
-<div class="box">
-  <h2>1. LV lezen</h2>
-  <input type="file" id="file" accept=".pdf"><br>
-  <button onclick="leesLV()">Lees LV</button>
-  <textarea id="lvText" placeholder="LV-tekst verschijnt hier…"></textarea>
-</div>
+<input type="file" id="file" accept=".pdf"><br>
+<button onclick="leesLV()">Lees LV</button>
 
-<div class="box">
-  <h2>2. Analyse</h2>
-  <button onclick="analyse()">Analyseer Planstraßen</button>
-  <div id="result"></div>
-</div>
+<textarea id="lvText" placeholder="LV-tekst verschijnt hier..."></textarea>
 
 <script>
 async function leesLV() {
@@ -83,113 +47,10 @@ async function leesLV() {
     text += "\n";
   }
 
-  document.getElementById("lvText").value = text;
-}
-
-function parseDate(d) {
-  const p = d.split(/[.\-]/);
-  if (p.length !== 3) return null;
-  return new Date(p[2], p[1] - 1, p[0]);
-}
-<script>
-function analyse() {
-  const text = document.getElementById("lvText").value;
-  const out = document.getElementById("result");
-  out.innerHTML = "";
-
-  if (!text.trim()) {
-    out.textContent = "Geen LV-tekst beschikbaar.";
-    return;
-  }
-
-  const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
-
-  // 1. Exact: 15.05.2024 – 31.05.2024
-  const exactRange =
-    /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(–|-|t\/m|bis)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
-
-  // 2. Vom … bis …
-  const vomBis =
-    /vom\s+(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s+bis\s+(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
-
-  // 3. Overige LV-tijdvakken
-  const overige =
-    /(KW\s*\d+\s*(–|-)\s*\d+|ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
-
-  const data = {};
-  let m;
-
-  while ((m = planRegex.exec(text)) !== null) {
-    const plan = "Planstraße " + m[2];
-    if (!data[plan]) {
-      data[plan] = {
-        periodes: [],
-        start: null,
-        end: null
-      };
-    }
-
-    const frag = text.substring(m.index, m.index + 1500);
-    let p;
-
-    // Exacte datums
-    while ((p = exactRange.exec(frag)) !== null) {
-      data[plan].periodes.push(p[0]);
-      const s = new Date(p[1].split(/[.\-]/).reverse().join("-"));
-      const e = new Date(p[2].split(/[.\-]/).reverse().join("-"));
-      if (!data[plan].start || s < data[plan].start) data[plan].start = s;
-      if (!data[plan].end   || e > data[plan].end)   data[plan].end   = e;
-    }
-
-    // vom … bis …
-    while ((p = vomBis.exec(frag)) !== null) {
-      data[plan].periodes.push("vom " + p[1] + " bis " + p[2]);
-      const s = new Date(p[1].split(/[.\-]/).reverse().join("-"));
-      const e = new Date(p[2].split(/[.\-]/).reverse().join("-"));
-      if (!data[plan].start || s < data[plan].start) data[plan].start = s;
-      if (!data[plan].end   || e > data[plan].end)   data[plan].end   = e;
-    }
-
-    // Overig
-    while ((p = overige.exec(frag)) !== null) {
-      if (!data[plan].periodes.includes(p[0])) {
-        data[plan].periodes.push(p[0]);
-      }
-    }
-  }
-
-  Object.entries(data).forEach(([plan, d], i) => {
-    const div = document.createElement("div");
-    div.className = "plan";
-
-    const periodeTekst =
-      d.start && d.end
-        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
-        : `<p class="muted">Geen exact datum‑tijdvak vastgelegd</p>`;
-
-    const samenvatting =
-      d.start && d.end
-        ? `<p><strong>Samenvatting:</strong><br>
-           ${plan} wordt uitgevoerd tussen ${d.start.toLocaleDateString()}
-           en ${d.end.toLocaleDateString()}, conform onderstaande LV-vermeldingen.
-           </p>`
-        : `<p><strong>Samenvatting:</strong><br>
-           Voor ${plan} bevat het LV geen exact start- en eindmoment.
-           De werkzaamheden zijn gekoppeld aan globale of indicatieve periodes.
-           </p>`;
-
-    div.innerHTML = `
-      <strong>${i + 1}. ${plan}</strong>
-      ${periodeTekst}
-      ${samenvatting}
-      <ul>${d.periodes.map(x => `<li>${x}</li>`).join("")}</ul>
-    `;
-    out.appendChild(div);
-  });
+  document.getElementById("lvText").value =
+    text || "[PDF bevat geen tekstlaag]";
 }
 </script>
-``
-
 
 </body>
 </html>
