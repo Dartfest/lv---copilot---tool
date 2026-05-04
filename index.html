@@ -76,7 +76,7 @@ async function leesLV() {
     const page = await pdf.getPage(i);
     const c = await page.getTextContent();
     const lijnen = c.items.map(it => it.str).filter(t => t.trim());
-    text += lijnen.join("\n") + "\n\n";
+    text += c.items.map(it => it.str || " ").join("\n") + "\n\n";
   }
   lvText.value = text;
 }
