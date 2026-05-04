@@ -2,23 +2,48 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>LV leestest</title>
+  <title>LV – Planstraße samenvatting</title>
 
+  <!-- ✅ pdf.js (bewezen werkend) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
+    textarea { width:100%; height:260px; font-family:monospace; white-space:pre-wrap; }
+    button { padding:6px 12px; margin:6px 0; }
+    .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
+    .plan {
+      border-left:4px solid #2563eb;
+      background:#eff6ff;
+      padding:10px;
+      margin:10px 0;
+    }
+    .muted { color:#555; font-size:0.9em; }
+  </style>
 </head>
 
 <body>
-<h1>LV leestest</h1>
 
-<input type="file" id="file" accept=".pdf"><br>
-<button onclick="leesLV()">Lees LV</button>
+<h1>LV – Planstraße samenvatting & tijdvakken</h1>
 
-<textarea id="out" style="width:100%; height:300px;"></textarea>
+<div class="box">
+  <h2>1. LV lezen</h2>
+  <input type="file" id="file" accept=".pdf"><br>
+  <button onclick="leesLV()">Lees LV</button>
+  <textarea id="lvText" placeholder="LV-tekst verschijnt hier…"></textarea>
+</div>
+
+<div class="box">
+  <h2>2. Analyse</h2>
+  <button onclick="analyse()">Analyseer Planstraßen</button>
+  <div id="result"></div>
+</div>
 
 <script>
+/* ===== LV LEZEN ===== */
 async function leesLV() {
   const f = document.getElementById("file").files[0];
-  if (!f) return alert("Kies een PDF");
+  if (!f) return alert("Kies eerst een PDF");
 
   const buffer = await f.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({
@@ -35,9 +60,73 @@ async function leesLV() {
     }
     text += "\n";
   }
+  document.getElementById("lvText").value = text;
+}
 
-  document.getElementById("out").value =
-    text || "[PDF heeft geen tekstlaag]";
+/* ===== datum helper ===== */
+function parseDate(d) {
+  const p = d.split(/[.\-]/);
+  if (p.length !== 3) return null;
+  return new Date(p[2], p[1] - 1, p[0]);
+}
+
+/* ===== ANALYSE ===== */
+function analyse() {
+  const text = document.getElementById("lvText").value;
+  const out = document.getElementById("result");
+  out.innerHTML = "";
+
+  if (!text.trim()) {
+    out.textContent = "Geen LV-tekst beschikbaar.";
+    return;
+  }
+
+  const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
+  const periodeRegex =
+    /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(bis|–|-|t\/m)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
+
+  const data = {};
+  let m;
+
+  while ((m = planRegex.exec(text)) !== null) {
+    const plan = "Planstraße " + m[2];
+    if (!data[plan]) data[plan] = { periodes: [], start: null, end: null };
+
+    const frag = text.substring(m.index, m.index + 1200);
+    let p;
+    while ((p = periodeRegex.exec(frag)) !== null) {
+      data[plan].periodes.push(p[0]);
+      const s = parseDate(p[1]);
+      const e = parseDate(p[3]);
+      if (s && (!data[plan].start || s < data[plan].start)) data[plan].start = s;
+      if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
+    }
+  }
+
+  const plans = Object.keys(data).sort((a,b) => {
+    if (!data[a].start && !data[b].start) return a.localeCompare(b);
+    if (!data[a].start) return 1;
+    if (!data[b].start) return -1;
+    return data[a].start - data[b].start;
+  });
+
+  plans.forEach((p,i) => {
+    const d = data[p];
+    const div = document.createElement("div");
+    div.className = "plan";
+
+    const periode =
+      d.start && d.end
+        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
+        : `<p class="muted">Geen exact tijdvak vermeld in LV</p>`;
+
+    div.innerHTML = `
+      <strong>${i+1}. ${p}</strong>
+      ${periode}
+      ${d.periodes.length ? `<ul>${d.periodes.map(x => `<li>${x}</li>`).join("")}</ul>` : ""}
+    `;
+    out.appendChild(div);
+  });
 }
 </script>
 
