@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool PRO</title>
+<title>LV Analyse PRO</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -10,13 +10,10 @@
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
 textarea { width:100%; height:250px; font-family:monospace; }
-button { padding:8px 14px; margin:8px 0; }
+button { padding:8px 14px; margin:8px 5px 8px 0; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .plan { background:#eef6ff; border-left:4px solid #2563eb; padding:10px; margin:10px 0; }
-.muted { color:#666; font-size:0.9em; }
-.fase { background:#f1f5f9; padding:8px; margin:6px 0; border-radius:4px; }
-.gap { background:#fff4e5; padding:6px; margin:4px 0; border-radius:4px; }
-.risk { background:#ffe4e6; padding:6px; margin:4px 0; border-radius:4px; }
+.risk { color:#b91c1c; font-weight:bold; }
 </style>
 </head>
 
@@ -36,7 +33,7 @@ button { padding:8px 14px; margin:8px 0; }
 
 <script>
 
-// ================= PDF =================
+// ================= PDF LEZEN =================
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -86,39 +83,32 @@ let fasesGlobaal = [];
 // ================= ANALYSE =================
 function analyse(){
 
-  let text = cleanText(document.getElementById("lvText").value);
+  cleanText(document.getElementById("lvText").value);
+
   const out = document.getElementById("result");
   out.innerHTML="";
 
   fasesGlobaal = [
 
-    {naam:"1. Bauabschnitt", plan:"Planstraße C", start:new Date(2026,5,1), eind:null, geenParallel:true},
-    {naam:"2. Bauabschnitt", plan:"Planstraße E", start:null, eind:new Date(2027,6,31), afhankelijk:1, geenParallel:true},
-    {naam:"3. Bauabschnitt", plan:"Planstraße D - Teil 1", start:new Date(2027,7,1), eind:null, verplichteWacht:true, geenParallel:true},
-    {naam:"4. Bauabschnitt", plan:"Planstraße D - Teil 2", start:null, eind:new Date(2028,4,31), afhankelijk:3, geenParallel:true}
+    {naam:"1. Bauabschnitt", plan:"Planstraße C", start:new Date(2026,5,1), eind:new Date(2027,6,31), geenParallel:true},
+
+    {naam:"2. Bauabschnitt", plan:"Planstraße E", start:new Date(2027,6,31), eind:new Date(2027,6,31), afhankelijk:1, geenParallel:true},
+
+    {naam:"3. Bauabschnitt", plan:"Planstraße D - Teil 1", start:new Date(2027,7,1), eind:new Date(2028,4,1), verplichteWacht:true, geenParallel:true},
+
+    {naam:"4. Bauabschnitt", plan:"Planstraße D - Teil 2", start:new Date(2028,4,1), eind:new Date(2028,4,31), afhankelijk:3, geenParallel:true}
 
   ];
 
-  // afhankelijkheden
-  fasesGlobaal.forEach((f,i)=>{
-    if(f.afhankelijk){
-      f.start = fasesGlobaal[f.afhankelijk-1].eind;
-    }
-    if(!f.eind && i < fasesGlobaal.length-1){
-      f.eind = fasesGlobaal[i+1].start;
-    }
-  });
-
-  // OUTPUT
   fasesGlobaal.forEach(f=>{
 
     const div=document.createElement("div");
     div.className="plan";
 
     div.innerHTML=`
-    <strong>${f.naam}: ${f.plan}</strong>
+    <strong>${f.naam}: ${f.plan}</strong><br>
 
-    <p><b>Periode:</b> ${f.start?.toLocaleDateString()} → ${f.eind?.toLocaleDateString()}</p>
+    <b>Periode:</b> ${f.start.toLocaleDateString()} → ${f.eind.toLocaleDateString()}<br><br>
 
     <b>Samenvatting:</b>
     <ul>
@@ -126,7 +116,7 @@ function analyse(){
     </ul>
 
     <b>Risico's:</b>
-    <ul>
+    <ul class="risk">
     ${risico(f).map(r=>`<li>${r}</li>`).join("")}
     </ul>
     `;
@@ -149,20 +139,21 @@ function exportPDF(){
 
   fasesGlobaal.forEach(f=>{
 
-    if(y > 270){
+    if(y > 260){
       doc.addPage();
       y = 15;
     }
 
     doc.setFontSize(12);
+    doc.setTextColor(0,0,0);
     doc.text(`${f.naam} - ${f.plan}`, 10, y);
     y += 6;
 
     doc.setFontSize(10);
-    doc.text(`Periode: ${f.start?.toLocaleDateString()} → ${f.eind?.toLocaleDateString()}`, 10, y);
+    doc.text(`Periode: ${f.start.toLocaleDateString()} → ${f.eind.toLocaleDateString()}`, 10, y);
     y += 6;
 
-    doc.text("Samenvatting:", 10, y);
+    doc.text("Werkzaamheden:", 10, y);
     y += 5;
 
     samenvatting(f).forEach(s=>{
@@ -171,8 +162,9 @@ function exportPDF(){
       y += lines.length * 5;
     });
 
-    y += 4;
+    y += 3;
 
+    doc.setTextColor(180,0,0); // 🔴 rood
     doc.text("Risico's:", 10, y);
     y += 5;
 
@@ -181,6 +173,8 @@ function exportPDF(){
       doc.text(lines, 10, y);
       y += lines.length * 5;
     });
+
+    doc.setTextColor(0,0,0);
 
     y += 10;
 
