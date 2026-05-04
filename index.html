@@ -2,42 +2,72 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV PDF Lezer – Definitieve Test</title>
+<title>LV PDF Lezer – Werkt</title>
 
-<!-- ✅ PDF.js CORRECT geladen -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-  window.addEventListener("load", () => {
-    if (!window.pdfjsLib) {
-      alert("pdf.js is NIET geladen – check internet/CDN");
-    } else {
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      console.log("pdfjsLib OK");
-    }
-  });
+<!-- ✅ PDF.JS CORRECT INGELADEN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.jsript>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
-.box { background:white; padding:16px; border-radius:6px; }
+.box { background:#fff; padding:16px; border-radius:6px; }
 textarea { width:100%; min-height:220px; font-family:monospace; }
-button { padding:6px 12px; margin-top:6px; }
-.status { margin:6px 0; font-weight:bold; }
+button { margin-top:6px; padding:6px 12px; }
+.status { margin-top:6px; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h2>LV‑PDF lezen (definitieve test)</h2>
+<h2>LV‑PDF lezen (definitief werkend)</h2>
 
 <div class="box">
   <input type="file" id="pdfFile" accept=".pdf"><br>
-  <button onclick="leesPDF()">Lees LV</button>
-
+  <button onclick="leesLV()">Lees LV</button>
   <div id="status" class="status"></div>
   <textarea id="output" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
 
 <script>
-async function leesPDF() {
+async function leesLV() {
+  const file = document.getElementById("pdfFile").files[0];
+  const status = document.getElementById("status");
+  const output = document.getElementById("output");
+
+  if (!file) {
+    alert("Geen LV‑PDF gekozen");
+    return;
+  }
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+    let text = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+
+      if (content.items.length === 0) {
+        status.innerText = "❌ PDF heeft geen tekstlaag (gescand)";
+        return;
+      }
+
+      text += content.items.map(it => it.str).join(" ") + "\n\n";
+    }
+
+    output.value = text;
+    status.innerText = "✅ LV succesvol gelezen";
+
+  } catch (err) {
+    status.innerText = "❌ Fout: " + err.message;
+    console.error(err);
+  }
+}
+</script>
+
+</body>
+</html>
