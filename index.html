@@ -2,10 +2,26 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>LV – test basis</title>
+  <title>PDF.js test</title>
+
+  <!-- ✅ EXACT één script-tag -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
+
 <body>
-  <h1>✅ Als je dit ziet is HTML correct</h1>
-  <p>Dit is een harde test. Er staan geen scripts in.</p>
+  <h1>PDF.js test</h1>
+
+  <button onclick="test()">Test pdf.js</button>
+  <pre id="out"></pre>
+
+<script>
+function test() {
+  document.getElementById("out").textContent =
+    typeof pdfjsLib === "undefined"
+      ? "❌ pdfjsLib NIET geladen"
+      : "✅ pdfjsLib is correct geladen";
+}
+</script>
+
 </body>
 </html>
