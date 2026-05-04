@@ -4,25 +4,37 @@
   <meta charset="UTF-8">
   <title>LV – Planstraße analyse</title>
 
-  <!-- pdf.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdfpt>
-  <script>
-    window.addEventListener("load", () => {
-      if (!window.pdfjsLib) {
-        alert("pdf.js is niet geladen");
-      } else {
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      }
-    });
-  </script>
+  <!-- ✅ pdf.js (zonder worker, stabiel op GitHub Pages) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
-    textarea { width:100%; min-height:220px; font-family:monospace; white-space:pre-wrap; }
-    button { padding:6px 12px; margin:6px 0; }
-    .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
-    .plan { border-left:4px solid #2563eb; background:#eff6ff; padding:8px; margin:8px 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      padding: 20px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 240px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    button {
+      padding: 6px 12px;
+      margin: 6px 0;
+    }
+    .box {
+      background: #ffffff;
+      padding: 16px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .plan {
+      border-left: 4px solid #2563eb;
+      background: #eff6ff;
+      padding: 10px;
+      margin: 10px 0;
+    }
   </style>
 </head>
 
@@ -44,22 +56,31 @@
 <script>
 async function leesLV() {
   const f = document.getElementById("file").files[0];
-  if (!f) return alert("Kies eerst een PDF");
+  if (!f) {
+    alert("Kies eerst een PDF");
+    return;
+  }
 
   const buf = await f.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
+  const pdf = await pdfjsLib.getDocument({
+    data: buf,
+    disableWorker: true   // 🔴 DE CRUCIALE FIX
+  }).promise;
 
   let text = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const c = await page.getTextContent();
-    for (const it of c.items) {
-      text += it.str + "\n";
+
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    for (const item of content.items) {
+      text += item.str + "\n";
     }
     text += "\n";
   }
+
   document.getElementById("lvText").value =
-    text || "[Geen tekstlaag in PDF]";
+    text || "[PDF bevat geen leesbare tekst]";
 }
 
 function analyse() {
@@ -73,31 +94,22 @@ function analyse() {
   }
 
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
-  const periodeRegex =
-    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(–|-|bis|t\/m)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (KW\s*\d+\s*(–|-)\s*\d+)/gi;
-
-  const data = {};
+  const data = new Set();
   let m;
+
   while ((m = planRegex.exec(text)) !== null) {
-    const p = "Planstraße " + m[2];
-    if (!data[p]) data[p] = [];
-    const frag = text.substring(m.index, m.index + 1200);
-    let d;
-    while ((d = periodeRegex.exec(frag)) !== null) {
-      data[p].push(d[0]);
-    }
+    data.add("Planstraße " + m[2]);
   }
 
-  Object.keys(data).forEach((k,i) => {
+  if (!data.size) {
+    out.textContent = "Geen Planstraßen gevonden.";
+    return;
+  }
+
+  [...data].forEach((p, i) => {
     const div = document.createElement("div");
     div.className = "plan";
-    div.innerHTML =
-      `<strong>${i+1}. ${k}</strong>` +
-      (data[k].length ?
-        `<ul>${data[k].map(x=>`<li>${x}</li>`).join("")}</ul>` :
-        `<p>Geen tijdvak vermeld</p>`);
+    div.textContent = `${i + 1}. ${p}`;
     out.appendChild(div);
   });
 }
