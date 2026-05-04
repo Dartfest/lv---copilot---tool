@@ -2,14 +2,14 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool (DeepL)</title>
+<title>LV Analyse Tool (Auto vertaling)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
 textarea { width:100%; height:250px; font-family:monospace; }
-button { padding:6px 10px; margin:4px 4px 4px 0; cursor:pointer; }
+button { padding:8px 14px; margin:8px 0; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .plan { background:#eef6ff; border-left:4px solid #2563eb; padding:10px; margin:10px 0; }
 .muted { color:#666; font-size:0.9em; }
@@ -20,14 +20,11 @@ button { padding:6px 10px; margin:4px 4px 4px 0; cursor:pointer; }
 
 <body>
 
-<h1>LV Analyse (DeepL vertaling)</h1>
+<h1>LV Analyse (automatische vertaling)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
-<button onclick="vertaalDeepL(document.getElementById('lvText').value)">
-  Vertaal volledige tekst via DeepL
-</button>
 <textarea id="lvText"></textarea>
 </div>
 
@@ -70,10 +67,32 @@ const maandMap = {
   "oktober":9,"november":10,"dezember":11
 };
 
-// ================= DEEPL =================
-function vertaalDeepL(t){
-  const url = "https://www.deepl.com/translator#de/nl/" + encodeURIComponent(t);
-  window.open(url, "_blank");
+// ================= GRATIS VERTALING =================
+async function vertaal(t){
+
+  try{
+    const res = await fetch("https://libretranslate.de/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        q: t,
+        source: "de",
+        target: "nl",
+        format: "text"
+      })
+    });
+
+    const data = await res.json();
+
+    if(data.translatedText){
+      return data.translatedText;
+    }
+
+  }catch(e){
+    console.log("vertaling fout", e);
+  }
+
+  return "(vertaling mislukt)";
 }
 
 // ================= SAMENVATTING =================
@@ -137,7 +156,7 @@ function berekenGaten(tijd){
 }
 
 // ================= ANALYSE =================
-function analyse(){
+async function analyse(){
 
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("result");
@@ -202,7 +221,7 @@ function analyse(){
   }
 
   // ================= OUTPUT =================
-  Object.entries(data).forEach(([plan,d],i)=>{
+  for(const [plan,d] of Object.entries(data)){
 
     d.tijd = mergeTijd(d.tijd);
     const gaps = berekenGaten(d.tijd);
@@ -211,19 +230,12 @@ function analyse(){
     div.className="plan";
 
     div.innerHTML=`
-    <strong>${i+1}. ${plan}</strong>
-
-    ${
-      d.start && d.end
-      ? `<p><b>Periode:</b> ${d.start.toLocaleDateString()} → ${d.end.toLocaleDateString()}</p>`
-      : `<p class="muted">Geen volledige periode</p>`
-    }
+    <strong>${plan}</strong>
 
     <b>Fasen:</b>
     ${d.tijd.map((t,i)=>`
       <div class="fase">
-        <b>Fase ${i+1}</b><br>
-        ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
+        Fase ${i+1}: ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
       </div>
     `).join("")}
 
@@ -239,20 +251,22 @@ function analyse(){
     }
 
     <b>Werkzaamheden:</b>
-    <ul>
-    ${d.sam.map(s=>`
-      <li>
-        ${s}<br>
-        <button onclick="vertaalDeepL(\`${s.replace(/`/g,"")}\`)">
-          Vertaal via DeepL
-        </button>
-      </li>
-    `).join("")}
-    </ul>
+    <ul class="werk"></ul>
     `;
 
     out.appendChild(div);
-  });
+
+    const lijst = div.querySelector(".werk");
+
+    for(const s of d.sam){
+      const li = document.createElement("li");
+      li.innerHTML = `${s}<br><span class="muted">→ vertalen...</span>`;
+      lijst.appendChild(li);
+
+      const v = await vertaal(s);
+      li.innerHTML = `${s}<br><span class="muted">→ ${v}</span>`;
+    }
+  }
 
 }
 
