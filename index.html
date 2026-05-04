@@ -66,9 +66,9 @@ function samenvatting(f){
 // ================= RISICO =================
 function risico(f){
   let r=[];
-  if(f.afhankelijk) r.push("Afhankelijk van vorige fase → kans op vertraging");
-  if(f.geenParallel) r.push("Geen parallel werk mogelijk → kritische planning");
-  if(f.verplichteWacht) r.push("Onderbreking → extra kosten en stilstand");
+  if(f.afhankelijk) r.push("Afhankelijk van vorige fase - kans op vertraging");
+  if(f.geenParallel) r.push("Geen parallel werk mogelijk - kritische planning");
+  if(f.verplichteWacht) r.push("Onderbreking - extra kosten en stilstand");
   return r.length ? r : ["Geen bijzonderheden"];
 }
 
@@ -81,7 +81,6 @@ function analyse(){
   const out = document.getElementById("result");
   out.innerHTML="";
 
-  // ===== CORRECTE PLANNING =====
   fasesGlobaal = [
 
     {
@@ -95,8 +94,9 @@ function analyse(){
     {
       naam:"2. Bauabschnitt",
       plan:"Planstraße E",
+      start:new Date(2027,7,1), // NA fase 1
+      eind:new Date(2027,8,15), // realistische duur toegevoegd
       afhankelijk:1,
-      eind:new Date(2027,6,31),
       geenParallel:true
     },
 
@@ -112,22 +112,18 @@ function analyse(){
     {
       naam:"4. Bauabschnitt",
       plan:"Planstraße D - Teil 2",
-      afhankelijk:3,
+      start:new Date(2028,4,1),
       eind:new Date(2028,4,31),
+      afhankelijk:3,
       geenParallel:true
     }
 
   ];
 
-  // ===== AFHANKELIJKHEDEN =====
-  fasesGlobaal.forEach((f,i)=>{
-
-    if(f.afhankelijk){
-      f.start = new Date(fasesGlobaal[f.afhankelijk-1].eind);
-    }
-
-    if(!f.eind && i < fasesGlobaal.length-1){
-      f.eind = new Date(fasesGlobaal[i+1].start);
+  // ===== veiligheidscheck (geen 0 dagen) =====
+  fasesGlobaal.forEach(f=>{
+    if(f.start && f.eind && f.start.getTime() === f.eind.getTime()){
+      f.eind = new Date(f.eind.getTime() + 1000*60*60*24*30);
     }
   });
 
