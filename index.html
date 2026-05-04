@@ -2,24 +2,25 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Universeel</title>
+<title>LV Analyse PRO (Universeel)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:220px; font-family:monospace; }
+textarea { width:100%; height:200px; font-family:monospace; }
 button { padding:8px 14px; margin:6px; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .plan { background:#eef6ff; border-left:5px solid #2563eb; padding:12px; margin:10px 0; }
+.general { background:#fefce8; border-left:5px solid #eab308; padding:12px; }
 .risk { color:#b91c1c; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse (Universeel)</h1>
+<h1>LV Analyse PRO</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -33,7 +34,7 @@ button { padding:8px 14px; margin:6px; }
 
 <script>
 
-// ================= PDF LEZEN =================
+// ================= PDF =================
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -53,185 +54,201 @@ async function leesLV(){
 
 // ================= CLEAN =================
 function clean(t){
-  return t.replace(/([A-Za-z])\s([A-Za-z])/g, "$1$2").replace(/\s+/g," ");
+  return t.replace(/\s+/g," ");
 }
 
-// ================= MAAND =================
-const maanden = {
-  "januar":0,"februar":1,"märz":2,"april":3,"mai":4,
-  "juni":5,"juli":6,"august":7,"september":8,
-  "oktober":9,"november":10,"dezember":11
-};
-
-// ================= DATUM =================
-function parseMaand(str){
-  const m = str.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(\d{4})/i);
-  if(!m) return null;
-  return new Date(parseInt(m[2]), maanden[m[1].toLowerCase()], 1);
-}
-
-// ================= SAMENVATTING =================
-function samenvatting(){
-  return [
-    "Aanleg riolering",
-    "Aanbrengen kabels en leidingen",
-    "Realisatie bouwwegen",
-    "Afstemming met nutsbedrijven"
-  ];
-}
-
-// ================= RISICO =================
-function risico(f){
+// ================= RISICO ENGINE =================
+function detectRisicos(text){
   let r=[];
-  if(f.afhankelijk) r.push("Afhankelijk van vorige fase - kans op vertraging");
-  if(!f.eind) r.push("Geen einddatum - planningsrisico");
-  return r.length ? r : ["Geen bijzonderheden"];
+
+  if(text.match(/ohne unterbrechung/i))
+    r.push("Continu werken vereist - hoge planningsdruk");
+
+  if(text.match(/nicht parallel/i))
+    r.push("Geen parallel werk mogelijk - kritische fasering");
+
+  if(text.match(/drittfirmen|versorgung/i))
+    r.push("Afhankelijk van derden (nutsbedrijven)");
+
+  if(text.match(/unterbrechung/i))
+    r.push("Mogelijke onderbrekingen - extra kosten");
+
+  if(text.match(/koordinierung/i))
+    r.push("Hoge coördinatie tussen partijen nodig");
+
+  return r.length ? r : ["Geen bijzondere risico's gevonden"];
 }
 
-// ================= DATA =================
-let fasesGlobaal = [];
+// ================= WERKZAAMHEDEN =================
+function detectWerk(text){
+  let w=[];
 
-// ================= ANALYSE =================
-function analyse(){
+  if(text.match(/kanal/i)) w.push("Aanleg riolering");
+  if(text.match(/kabel|leitung/i)) w.push("Kabels en leidingen");
+  if(text.match(/straße/i)) w.push("Bouwwegen / infrastructuur");
+  if(text.match(/versorgung/i)) w.push("Nutsvoorzieningen");
 
-  let text = clean(document.getElementById("lvText").value);
-  const out = document.getElementById("result");
-  out.innerHTML="";
+  return w.length ? w : ["Algemene civiele werkzaamheden"];
+}
 
-  fasesGlobaal = [];
+// ================= FASE DETECTIE =================
+function detectFases(text){
 
-  // ===== FASES HERKENNEN =====
-  const regex = /(\d+)\.\s*Bauabschnitt.*?Planstraße\s+([A-Z])/gi;
+  const regex = /(\d+)\.\s*bauabschnitt.*?planstraße\s+([a-z])/gi;
 
+  let fases=[];
   let m;
+
   while((m=regex.exec(text))){
-    fasesGlobaal.push({
-      nr: parseInt(m[1]),
-      naam: "Bauabschnitt " + m[1],
-      plan: "Planstraße " + m[2],
-      start:null,
-      eind:null
+    fases.push({
+      naam: "Fase " + m[1],
+      plan: "Planstraße " + m[2].toUpperCase()
     });
   }
 
-  if(fasesGlobaal.length === 0){
-    out.innerHTML = "<b>Geen fases gevonden (controleer tekst)</b>";
-    return;
+  return fases;
+}
+
+// ================= ANALYSE =================
+let analyseData = {};
+
+function analyse(){
+
+  let text = clean(document.getElementById("lvText").value.toLowerCase());
+  const out = document.getElementById("result");
+  out.innerHTML="";
+
+  const fases = detectFases(text);
+
+  analyseData = {
+    fases: fases,
+    werk: detectWerk(text),
+    risico: detectRisicos(text)
+  };
+
+  // ===== MET FASES =====
+  if(fases.length > 0){
+
+    fases.forEach(f=>{
+      const div=document.createElement("div");
+      div.className="plan";
+
+      div.innerHTML=`
+      <strong>${f.naam}: ${f.plan}</strong><br><br>
+
+      <b>Werkzaamheden:</b>
+      <ul>${analyseData.werk.map(w=>`<li>${w}</li>`).join("")}</ul>
+
+      <b>Risico's:</b>
+      <ul class="risk">${analyseData.risico.map(r=>`<li>${r}</li>`).join("")}</ul>
+      `;
+
+      out.appendChild(div);
+    });
+
   }
 
-  // ===== DATUMS HERKENNEN =====
-  fasesGlobaal.forEach(f=>{
-
-    const idx = text.indexOf(f.plan);
-    const frag = text.slice(idx, idx+500);
-
-    const startMatch = frag.match(/im\s+[a-zä]+\s+\d{4}/i);
-    const endMatch = frag.match(/bis\s+[a-zä]+\s+\d{4}/i);
-
-    if(startMatch) f.start = parseMaand(startMatch[0]);
-    if(endMatch) f.eind = parseMaand(endMatch[0]);
-  });
-
-  // ===== VOLGORDE + AFHANKELIJKHEID =====
-  fasesGlobaal.sort((a,b)=>a.nr-b.nr);
-
-  fasesGlobaal.forEach((f,i)=>{
-    if(i>0 && !f.start){
-      f.start = fasesGlobaal[i-1].eind;
-      f.afhankelijk = true;
-    }
-  });
-
-  // ===== OUTPUT =====
-  fasesGlobaal.forEach(f=>{
+  // ===== ZONDER FASES (BELANGRIJK!) =====
+  else{
 
     const div=document.createElement("div");
-    div.className="plan";
+    div.className="general";
 
     div.innerHTML=`
-    <strong>${f.naam}: ${f.plan}</strong><br>
+    <strong>Algemene LV Analyse</strong><br><br>
 
-    <b>Periode:</b> 
-    ${f.start ? f.start.toLocaleDateString() : "onbekend"} - 
-    ${f.eind ? f.eind.toLocaleDateString() : "onbekend"}<br><br>
+    <b>Werkzaamheden:</b>
+    <ul>${analyseData.werk.map(w=>`<li>${w}</li>`).join("")}</ul>
 
-    <b>Samenvatting:</b>
-    <ul>
-    ${samenvatting().map(s=>`<li>${s}</li>`).join("")}
-    </ul>
+    <b>Risico's uitvoering:</b>
+    <ul class="risk">${analyseData.risico.map(r=>`<li>${r}</li>`).join("")}</ul>
 
-    <b>Risico's:</b>
-    <ul class="risk">
-    ${risico(f).map(r=>`<li>${r}</li>`).join("")}
-    </ul>
+    <b>Analyse:</b><br>
+    De werkzaamheden vereisen afstemming tussen meerdere partijen en een strakke planning.
+    Let op afhankelijkheden, mogelijke onderbrekingen en beperkte parallelle uitvoering.
     `;
 
     out.appendChild(div);
-  });
+  }
 
 }
 
-// ================= PDF EXPORT =================
+// ================= PDF =================
 function exportPDF(){
 
-  if(fasesGlobaal.length === 0){
-    alert("Eerst analyse uitvoeren");
+  if(!analyseData.werk){
+    alert("Eerst analyseren");
     return;
   }
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  let y = 15;
+  let y=15;
 
   doc.setFontSize(16);
-  doc.text("LV Analyse Rapport", 10, y);
-  y += 10;
+  doc.text("LV Analyse Rapport",10,y);
+  y+=10;
 
-  fasesGlobaal.forEach(f=>{
+  // ===== FASES =====
+  if(analyseData.fases.length>0){
 
-    if(y > 260){
-      doc.addPage();
-      y = 15;
-    }
+    analyseData.fases.forEach(f=>{
 
-    doc.setFontSize(12);
-    doc.text(`${f.naam} - ${f.plan}`, 10, y);
-    y += 6;
+      if(y>260){ doc.addPage(); y=15; }
 
-    doc.setFontSize(10);
-    doc.text(
-      `Periode: ${f.start ? f.start.toLocaleDateString() : "-"} - ${f.eind ? f.eind.toLocaleDateString() : "-"}`,
-      10,
-      y
-    );
-    y += 6;
+      doc.setFontSize(12);
+      doc.text(`${f.naam} - ${f.plan}`,10,y); y+=6;
 
-    doc.text("Werkzaamheden:", 10, y);
-    y += 5;
+      doc.setFontSize(10);
+      doc.text("Werkzaamheden:",10,y); y+=5;
 
-    samenvatting().forEach(s=>{
-      doc.text("- " + s, 10, y);
-      y += 5;
+      analyseData.werk.forEach(w=>{
+        doc.text("- "+w,10,y); y+=5;
+      });
+
+      y+=3;
+
+      doc.setTextColor(200,0,0);
+      doc.text("Risico's:",10,y); y+=5;
+
+      analyseData.risico.forEach(r=>{
+        doc.text("- "+r,10,y); y+=5;
+      });
+
+      doc.setTextColor(0,0,0);
+      y+=10;
+
     });
 
-    y += 3;
+  }
+
+  // ===== ALGEMEEN =====
+  else{
+
+    doc.setFontSize(12);
+    doc.text("Algemene LV Analyse",10,y); y+=8;
+
+    doc.setFontSize(10);
+    doc.text("Werkzaamheden:",10,y); y+=5;
+
+    analyseData.werk.forEach(w=>{
+      doc.text("- "+w,10,y); y+=5;
+    });
+
+    y+=3;
 
     doc.setTextColor(200,0,0);
-    doc.text("Risico's:", 10, y);
-    y += 5;
+    doc.text("Risico's:",10,y); y+=5;
 
-    risico(f).forEach(r=>{
-      doc.text("- " + r, 10, y);
-      y += 5;
+    analyseData.risico.forEach(r=>{
+      doc.text("- "+r,10,y); y+=5;
     });
 
     doc.setTextColor(0,0,0);
-    y += 10;
+  }
 
-  });
-
-  doc.save("LV_Analyse.pdf");
+  doc.save("LV_Analyse_Pro.pdf");
 }
 
 </script>
