@@ -4,28 +4,27 @@
 <meta charset="UTF-8">
 <title>LV – Uitvoerderssamenvatting per Planstraße</title>
 
-<!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+<!-- ✅ PDF.js CORRECT -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.jsript>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
-<!-- jsPDF -->
+<!-- ✅ jsPDF CORRECT -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
 textarea { width:100%; min-height:160px; font-family:monospace; padding:10px; }
-button { padding:6px 12px; margin:4px; }
+button { padding:6px 12px; margin:4px 6px 4px 0; }
 
 .plan { padding:14px; border-left:8px solid; border-radius:6px; margin-top:16px; }
 .pa { background:#f3e8ff; border-color:#9333ea; }
 .pb { background:#e0f2fe; border-color:#0284c7; }
 .pc { background:#dcfce7; border-color:#16a34a; }
 .pd { background:#ffedd5; border-color:#ea580c; }
-.pe { background:#ffe4e6; border-color:#be123c; }
+.px { background:#f3f4f6; border-color:#6b7280; }
 
 ul { margin-left:18px; }
 </style>
@@ -33,7 +32,7 @@ ul { margin-left:18px; }
 
 <body>
 
-<h1>LV → Uitvoerderssamenvatting per Planstraße</h1>
+<h1>LV – Uitvoerderssamenvatting per Planstraße</h1>
 
 <div class="box">
   <h2>1. LV‑PDF(s)</h2>
@@ -43,13 +42,14 @@ ul { margin-left:18px; }
 </div>
 
 <div class="box">
-  <h2>2. Analyse</h2>
-  <button onclick="analysePlanstrassen()">Analyseer Planstraßen</button>
+  <h2>2. Analyse per Planstraße</h2>
+  <button onclick="analysePlanstrassen()">Analyseer</button>
   <button onclick="exportUitvoerderPDF()">📄 Uitvoerders‑PDF</button>
   <div id="output"></div>
 </div>
 
 <script>
+/* ===== PDF lezen ===== */
 async function readPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -68,7 +68,7 @@ async function readLV() {
   lvText.value = t;
 }
 
-/* === CORE: bundelen per Planstraße LETTER === */
+/* ===== PLANSTRASSE BUNDELING (CORE) ===== */
 let planData = {};
 
 function analysePlanstrassen() {
@@ -76,78 +76,66 @@ function analysePlanstrassen() {
   output.innerHTML = "";
 
   const text = lvText.value;
-
   const regex = /Planstraße\s+([A-Z])/gi;
   let match;
 
   while ((match = regex.exec(text)) !== null) {
-    const letter = match[1];           // A, B, C, D…
+    const letter = match[1];
     const key = `Planstraße ${letter}`;
 
     if (!planData[key]) {
       planData[key] = {
-        fragments: [],
-        risico: new Set(),
-        uitvoering: new Set()
+        uitvoering: new Set(),
+        risico: new Set()
       };
     }
 
-    const fragment = text.substring(match.index, match.index + 500);
-    const t = fragment.toLowerCase();
+    const fragment = text.substring(match.index, match.index + 500).toLowerCase();
 
-    planData[key].fragments.push(fragment);
+    if (fragment.includes("bauabschnitt"))
+      planData[key].uitvoering.add("Meerdere Bauabschnitte binnen deze straat");
 
-    if (t.includes("nicht vor") || t.includes("frühestens"))
-      planData[key].uitvoering.add("Vaste startdatum / volgorde benoemd");
-
-    if (t.includes("ohne unterbrechung"))
+    if (fragment.includes("ohne unterbrechung"))
       planData[key].uitvoering.add("Zonder onderbreking uitvoeren");
 
-    if (t.includes("bauabschnitt"))
-      planData[key].uitvoering.add("Meerdere Bauabschnitte binnen straat");
+    if (fragment.includes("frist") || fragment.includes("termin"))
+      planData[key].uitvoering.add("Vaste volgorde / termijn genoemd");
 
-    if (t.includes("abweich") || t.includes("mehr"))
-      planData[key].risiko.add("Afwijkingen / meerwerk mogelijk");
+    if (fragment.includes("abweich") || fragment.includes("mehr"))
+      planData[key].risico.add("Afwijkingen / meerwerk mogelijk");
 
-    if (t.includes("hand"))
-      planData[key].risiko.add("Handmatig werk benoemd");
+    if (fragment.includes("hand"))
+      planData[key].risico.add("Handmatig werk benoemd");
   }
 
   Object.keys(planData).forEach(key => {
     const letter = key.slice(-1);
-    const color =
+    const cls =
       letter === "A" ? "pa" :
       letter === "B" ? "pb" :
       letter === "C" ? "pc" :
-      letter === "D" ? "pd" : "pe";
+      letter === "D" ? "pd" : "px";
 
     const d = document.createElement("div");
-    d.className = `plan ${color}`;
+    d.className = `plan ${cls}`;
     d.innerHTML = `
 <h3>${key}</h3>
 
-<strong>Context</strong>
-<p>
-Deze Planstraße komt meerdere keren in het LV voor en vormt één samenhangend
-uitvoeringsgebied. Alle werkzaamheden binnen deze straat moeten als geheel
-worden gepland en uitgevoerd.
-</p>
-
-<strong>Uitvoering – kernpunten</strong>
+<strong>Uitvoering – samengevat</strong>
 <ul>
-${[...planData[key].uitvoering].map(u => `<li>${u}</li>`).join("") || "<li>Geen specifieke uitvoeringsvoorwaarden benoemd.</li>"}
+${[...planData[key].uitvoering].map(u=>`<li>${u}</li>`).join("") || "<li>Geen specifieke uitvoeringsvoorwaarden</li>"}
 </ul>
 
 <strong>Risico’s / aandachtspunten</strong>
 <ul>
-${[...planData[key].risiko].map(r => `<li>${r}</li>`).join("") || "<li>Geen expliciete risico’s benoemd.</li>"}
+${[...planData[key].risico].map(r=>`<li>${r}</li>`).join("") || "<li>Geen expliciete risico’s genoemd</li>"}
 </ul>
 `;
     output.appendChild(d);
   });
 }
 
-/* === PDF === */
+/* ===== UITVOERDERS PDF ===== */
 function exportUitvoerderPDF() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
@@ -160,22 +148,22 @@ function exportUitvoerderPDF() {
 
   Object.keys(planData).forEach(key => {
     const data = planData[key];
-    const blok = `
+    const tekst = `
 ${key}
 
 Uitvoering:
 - ${[...data.uitvoering].join("\n- ") || "Geen specifieke voorwaarden"}
 
 Risico’s:
-- ${[...data.risiko].join("\n- ") || "Geen expliciete risico’s"}
+- ${[...data.risico].join("\n- ") || "Geen expliciete risico’s"}
 `;
-    const txt = pdf.splitTextToSize(blok, 180);
-    if (y + txt.length * 5 > 280) {
+    const block = pdf.splitTextToSize(tekst, 180);
+    if (y + block.length * 5 > 280) {
       pdf.addPage();
       y = 10;
     }
-    pdf.text(txt, 10, y);
-    y += txt.length * 5 + 8;
+    pdf.text(block, 10, y);
+    y += block.length * 5 + 8;
   });
 
   pdf.save("uitvoerderssamenvatting-planstrassen.pdf");
@@ -184,4 +172,3 @@ Risico’s:
 
 </body>
 </html>
-``
