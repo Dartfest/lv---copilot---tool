@@ -2,39 +2,25 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool PRO</title>
+<title>LV Analyse Tool</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
 textarea { width:100%; height:250px; font-family:monospace; }
-button { padding:8px 14px; margin:8px 5px 8px 0; }
+button { padding:8px 14px; margin:8px 0; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .plan { background:#eef6ff; border-left:4px solid #2563eb; padding:10px; margin:10px 0; }
-
-.gantt { margin-top:10px; }
-.bar {
-  height:20px;
-  background:#2563eb;
-  margin:4px 0;
-  border-radius:4px;
-  position:relative;
-}
-.bar span {
-  position:absolute;
-  left:5px;
-  top:2px;
-  font-size:12px;
-  color:white;
-}
+.muted { color:#666; font-size:0.9em; }
+.fase { background:#f1f5f9; padding:8px; margin:6px 0; border-radius:4px; }
+.gap { background:#fff4e5; padding:6px; margin:4px 0; border-radius:4px; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse PRO</h1>
+<h1>LV Analyse (Planstraßen + tijd)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -44,13 +30,12 @@ button { padding:8px 14px; margin:8px 5px 8px 0; }
 
 <div class="box">
 <button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
 <div id="result"></div>
 </div>
 
 <script>
 
-// ================= PDF LEZEN =================
+// ================= PDF =================
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -71,6 +56,7 @@ async function leesLV(){
 // ================= DATUM =================
 function parseDate(d){
   const p = d.split(/[.\-]/);
+  if(p.length!==3) return null;
   return new Date(p[2], p[1]-1, p[0]);
 }
 
@@ -81,75 +67,92 @@ const maandMap = {
   "oktober":9,"november":10,"dezember":11
 };
 
-// ================= ECHTE VERTALING =================
+// ================= VERBETERDE VERTALING =================
 function vertaal(t){
+
   const dict = {
-    "herstellung":"aanleg",
-    "rückbau":"sloop",
-    "abbruch":"sloop",
-    "arbeiten":"werkzaamheden",
-    "kanal":"riolering",
-    "kabel":"kabels",
-    "leitung":"leidingen",
-    "bau":"bouw",
-    "straße":"straat",
-    "erschließung":"bouwrijp maken",
-    "versorgung":"voorzieningen",
-    "entwässerung":"afwatering"
+    "Herstellung":"aanleg",
+    "Rückbau":"sloop",
+    "Abbruch":"sloop",
+    "Arbeiten":"werkzaamheden",
+    "Kanal":"riolering",
+    "Kabel":"kabels",
+    "Leitung":"leidingen",
+    "Bau":"bouw",
+    "Straße":"straat",
+    "Erschließung":"bouwrijp maken",
+    "Versorgung":"voorzieningen",
+    "Entwässerung":"afwatering"
   };
 
-  let r = t.toLowerCase();
+  let r = t;
 
   Object.keys(dict).forEach(k=>{
-    r = r.replaceAll(k, dict[k]);
+    const regex = new RegExp(k, "gi");
+    r = r.replace(regex, dict[k]);
   });
 
   return r;
 }
 
-// ================= MERGE =================
-function mergeTijd(tijd){
-  tijd.sort((a,b)=>a.start-b.start);
-  let out=[];
-
-  tijd.forEach(t=>{
-    if(!out.length) return out.push(t);
-
-    let last=out[out.length-1];
-
-    if(t.start <= last.end){
-      last.end = new Date(Math.max(last.end, t.end));
-    } else {
-      out.push(t);
-    }
-  });
-
-  return out;
+// ================= SAMENVATTING =================
+function samenvatting(frag){
+  const regels = frag.split("\n");
+  const keys = ["bau","arbeiten","kanal","kabel","leitung"];
+  return regels.filter(r => keys.some(k => r.toLowerCase().includes(k))).slice(0,5);
 }
 
-// ================= GANTT =================
-function maakGantt(tijd){
+// ================= RISICO =================
+function risico(d){
+  let r=[];
 
-  if(!tijd.length) return "";
+  if(d.tijd.length>1) r.push("Meerdere fasen (let op overlap)");
+  if(!d.end) r.push("Geen einddatum");
 
-  const min = Math.min(...tijd.map(t=>t.start));
-  const max = Math.max(...tijd.map(t=>t.end));
-  const total = max - min;
+  if(d.start && d.end){
+    let days=(d.end-d.start)/(1000*60*60*24);
+    if(days<7) r.push("Zeer korte periode");
+  }
 
-  return `
-    <div class="gantt">
-      ${tijd.map((t,i)=>{
-        const left = ((t.start - min)/total)*100;
-        const width = ((t.end - t.start)/total)*100;
+  return r.length? r:["Geen bijzonderheden"];
+}
 
-        return `
-          <div class="bar" style="margin-left:${left}%; width:${width}%;">
-            <span>Fase ${i+1}</span>
-          </div>
-        `;
-      }).join("")}
-    </div>
-  `;
+// ================= MERGE =================
+function mergeTijd(tijd){
+  if(!tijd.length) return [];
+
+  tijd.sort((a,b)=>a.start-b.start);
+  let merged=[tijd[0]];
+
+  for(let i=1;i<tijd.length;i++){
+    let last=merged[merged.length-1];
+    let cur=tijd[i];
+
+    if(cur.start <= last.end){
+      last.end = new Date(Math.max(last.end, cur.end));
+    } else {
+      merged.push(cur);
+    }
+  }
+
+  return merged;
+}
+
+// ================= GAPS =================
+function berekenGaten(tijd){
+  let gaps=[];
+  for(let i=1;i<tijd.length;i++){
+    const prev=tijd[i-1];
+    const cur=tijd[i];
+
+    if(cur.start > prev.end){
+      gaps.push({
+        start: prev.end,
+        end: cur.start
+      });
+    }
+  }
+  return gaps;
 }
 
 // ================= ANALYSE =================
@@ -161,6 +164,7 @@ function analyse(){
 
   const planRegex = /Planstra(ß|ss)e[\s]+([A-Z])/gi;
   const exactRegex = /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}).*?(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
+  const maandRegex = /(im|bis)\s+(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(\d{4})/gi;
 
   let data={};
   let m;
@@ -168,66 +172,108 @@ function analyse(){
   while((m=planRegex.exec(text))!==null){
 
     const plan="Planstraße "+m[2];
-    if(!data[plan]) data[plan]={tijd:[], sam:[]};
+
+    if(!data[plan]) data[plan]={tijd:[], start:null, end:null, sam:[]};
 
     const frag = text.slice(m.index, m.index+2000);
 
     let d;
 
+    // exacte datums
     while((d=exactRegex.exec(frag))){
-      data[plan].tijd.push({
-        start:parseDate(d[1]),
-        end:parseDate(d[2])
-      });
+      const s=parseDate(d[1]);
+      const e=parseDate(d[2]);
+
+      if(s&&e){
+        data[plan].tijd.push({start:s,end:e});
+
+        if(!data[plan].start || s<data[plan].start) data[plan].start=s;
+        if(!data[plan].end || e>data[plan].end) data[plan].end=e;
+      }
     }
 
-    data[plan].sam.push(...frag.split("\n").slice(0,5));
+    // maand datums
+    let mm;
+    let tempStart=null;
+
+    while((mm=maandRegex.exec(frag))){
+      const type=mm[1];
+      const maand=maandMap[mm[2].toLowerCase()];
+      const jaar=parseInt(mm[3]);
+
+      if(type==="im"){
+        tempStart = new Date(jaar, maand, 1);
+      }
+
+      if(type==="bis" && tempStart){
+        const eind = new Date(jaar, maand+1, 0);
+
+        data[plan].tijd.push({start:tempStart, end:eind});
+
+        if(!data[plan].start || tempStart<data[plan].start) data[plan].start=tempStart;
+        if(!data[plan].end || eind>data[plan].end) data[plan].end=eind;
+
+        tempStart=null;
+      }
+    }
+
+    // samenvatting
+    samenvatting(frag).forEach(s=>{
+      if(!data[plan].sam.includes(s)) data[plan].sam.push(s);
+    });
   }
 
   // ================= OUTPUT =================
   Object.entries(data).forEach(([plan,d],i)=>{
 
     d.tijd = mergeTijd(d.tijd);
+    const gaps = berekenGaten(d.tijd);
 
     const div=document.createElement("div");
     div.className="plan";
 
     div.innerHTML=`
-    <strong>${plan}</strong>
+    <strong>${i+1}. ${plan}</strong>
+
+    ${
+      d.start && d.end
+      ? `<p><b>Periode:</b> ${d.start.toLocaleDateString()} → ${d.end.toLocaleDateString()}</p>`
+      : `<p class="muted">Geen volledige periode</p>`
+    }
 
     <b>Fasen:</b>
     ${d.tijd.map((t,i)=>`
-      <div>
-        Fase ${i+1}: ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
+      <div class="fase">
+        <b>Fase ${i+1}</b><br>
+        ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
       </div>
     `).join("")}
 
-    <b>Gantt:</b>
-    ${maakGantt(d.tijd)}
+    <b>Onderbrekingen:</b>
+    ${
+      gaps.length
+      ? gaps.map(g=>`
+        <div class="gap">
+          ${g.start.toLocaleDateString()} → ${g.end.toLocaleDateString()}
+        </div>
+      `).join("")
+      : `<div class="muted">Geen</div>`
+    }
 
     <b>Werkzaamheden:</b>
     <ul>
-    ${d.sam.map(s=>`
-      <li>${vertaal(s)}</li>
-    `).join("")}
+    ${d.sam.map(s=>`<li>${s}<br><span class="muted">→ ${vertaal(s)}</span></li>`).join("")}
+    </ul>
+
+    <b>Risico's:</b>
+    <ul>
+    ${risico(d).map(r=>`<li>${r}</li>`).join("")}
     </ul>
     `;
 
     out.appendChild(div);
   });
 
-}
-
-// ================= PDF EXPORT =================
-function exportPDF(){
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  const text = document.getElementById("result").innerText;
-
-  doc.text(text, 10, 10);
-  doc.save("analyse.pdf");
 }
 
 </script>
