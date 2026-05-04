@@ -2,9 +2,9 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV – Planstraße fase (veilige test)</title>
+<title>LV – Planstraße fase uit LV</title>
 
-<!-- ✅ PDF.js – bewezen werkend -->
+<!-- PDF.js – bewezen werkend -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -12,21 +12,21 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 </script>
 
 <style>
-body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
+body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
 textarea { width:100%; min-height:220px; font-family:monospace; }
-button { padding:6px 12px; margin-right:6px; }
-.plan { margin-top:12px; padding:12px; border-left:6px solid #16a34a; background:#ecfdf5; }
+button { padding:6px 12px; margin-top:6px; }
+.plan { margin-top:12px; padding:12px; border-left:6px solid #2563eb; background:#eff6ff; }
 </style>
 </head>
 
 <body>
 
-<h1>LV – Planstraße & faseperiode (test)</h1>
+<h1>LV – Planstraße & fase (LV‑bron)</h1>
 
 <div class="box">
   <h2>1. LV lezen</h2>
-  <input type="file" id="file" accept=".pdf"><br><br>
+  <input type="file" id="file" accept=".pdf"><br>
   <button onclick="leesLV()">Lees LV</button>
   <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
@@ -78,7 +78,7 @@ function analyse() {
     const key = `Planstraße ${m[1]}`;
     if (!data[key]) data[key] = new Set();
 
-    const frag = text.substring(m.index, m.index + 800);
+    const frag = text.substring(m.index, m.index + 900);
     let d;
     while ((d = dateRegex.exec(frag)) !== null) {
       data[key].add(d[0]);
