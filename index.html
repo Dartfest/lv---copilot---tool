@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <title>LV – Planstraße analyse</title>
 
-  <!-- ✅ PDF.JS CORRECT GELADEN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js<style>
+  <!-- pdf.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174script>
+
+  <style>
     body {
       font-family: Arial, sans-serif;
       background: #f4f6f8;
@@ -13,7 +15,7 @@
     }
     textarea {
       width: 100%;
-      min-height: 220px;
+      min-height: 240px;
       font-family: monospace;
       white-space: pre-wrap;
     }
@@ -34,7 +36,7 @@
       margin: 10px 0;
     }
     .muted {
-      color:#666;
+      color: #666;
       font-size: 0.9em;
     }
   </style>
@@ -45,20 +47,17 @@
 <h1>LV – Planstraße analyse</h1>
 
 <div class="box">
-  <h2>1. LV lezen</h2>
   <input type="file" id="file" accept=".pdf"><br>
   <button onclick="leesLV()">Lees LV</button>
   <textarea id="lvText" placeholder="LV-tekst verschijnt hier..."></textarea>
 </div>
 
 <div class="box">
-  <h2>2. Samenvatting per Planstraße</h2>
   <button onclick="analyse()">Analyseer Planstraßen</button>
   <div id="result"></div>
 </div>
 
 <script>
-/* ================= LV LEZEN ================= */
 async function leesLV() {
   const f = document.getElementById("file").files[0];
   if (!f) {
@@ -66,16 +65,16 @@ async function leesLV() {
     return;
   }
 
-  const buf = await f.arrayBuffer();
+  const buffer = await f.arrayBuffer();
 
   const pdf = await pdfjsLib.getDocument({
-    data: buf,
+    data: buffer,
     disableWorker: true
   }).promise;
 
   let text = "";
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     for (const item of content.items) {
       text += item.str + "\n";
@@ -87,30 +86,19 @@ async function leesLV() {
     text || "[Geen leesbare tekst gevonden]";
 }
 
-/* ===== Hulpfunctie: datum parser ===== */
-function parseDate(d) {
-  const m = d.match(/(\d{1,2})[.\-](\d{1,2})[.\-](\d{4})/);
-  if (!m) return null;
-  return new Date(m[3], m[2] - 1, m[1]);
-}
-
-/* ================= ANALYSE ================= */
 function analyse() {
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("result");
   out.innerHTML = "";
 
   if (!text.trim()) {
-    out.textContent = "Geen LV-tekst beschikbaar.";
+    out.textContent = "Geen LV‑tekst beschikbaar.";
     return;
   }
 
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
-
   const periodeRegex =
-    /(vom\s+(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s+bis\s+(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}))|
-     ((\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(–|-|bis|t\/m)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}))|
-     (KW\s*\d+\s*(–|-)\s*\d+)/gi;
+    /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}).*?(bis|–|-|t\/m).*?(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
 
   const data = {};
   let m;
@@ -121,49 +109,35 @@ function analyse() {
       data[plan] = { periodes: [], start: null, end: null };
     }
 
-    const frag = text.substring(m.index, m.index + 1500);
+    const fragment = text.substring(m.index, m.index + 1200);
     let p;
-    while ((p = periodeRegex.exec(frag)) !== null) {
+    while ((p = periodeRegex.exec(fragment)) !== null) {
       data[plan].periodes.push(p[0]);
 
-      if (p[2] && p[3]) {
-        const s = parseDate(p[2]);
-        const e = parseDate(p[3]);
-        if (s && (!data[plan].start || s < data[plan].start)) data[plan].start = s;
-        if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
-      }
-      if (p[5] && p[6]) {
-        const s = parseDate(p[5]);
-        const e = parseDate(p[6]);
-        if (s && (!data[plan].start || s < data[plan].start)) data[plan].start = s;
-        if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
-      }
+      const s = new Date(p[1].split(/[.\-]/).reverse().join("-"));
+      const e = new Date(p[3].split(/[.\-]/).reverse().join("-"));
+
+      if (!data[plan].start || s < data[plan].start) data[plan].start = s;
+      if (!data[plan].end || e > data[plan].end) data[plan].end = e;
     }
   }
 
-  const plans = Object.keys(data).sort((a, b) => {
-    if (!data[a].start && !data[b].start) return a.localeCompare(b);
-    if (!data[a].start) return 1;
-    if (!data[b].start) return -1;
-    return data[a].start - data[b].start;
-  });
-
-  plans.forEach((p, i) => {
+  Object.keys(data).forEach((p, i) => {
     const d = data[p];
     const div = document.createElement("div");
     div.className = "plan";
 
-    let periodeTekst = `<p class="muted">Geen exact tijdvak vermeld</p>`;
-    if (d.start && d.end) {
-      periodeTekst =
-        `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`;
-    }
+    const periode =
+      d.start && d.end
+        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
+        : `<p class="muted">Geen exact tijdvak in LV vermeld</p>`;
 
     div.innerHTML = `
       <strong>${i + 1}. ${p}</strong>
-      ${periodeTekst}
+      ${periode}
       ${d.periodes.length ? `<ul>${d.periodes.map(x => `<li>${x}</li>`).join("")}</ul>` : ""}
     `;
+
     out.appendChild(div);
   });
 }
