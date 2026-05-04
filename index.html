@@ -2,28 +2,65 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>LV – stabiele basis</title>
+  <title>LV – Tijdvakken per Planstraße</title>
 
-  <!-- pdf.js -->
+  <!-- pdf.js (bewezen stabiel) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; padding:20px; }
-    textarea { width:100%; height:300px; font-family:monospace; white-space:pre-wrap; }
-    button { padding:6px 12px; margin:6px 0; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f4f6f8;
+    }
+    textarea {
+      width: 100%;
+      height: 260px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    button {
+      padding: 6px 12px;
+      margin: 6px 0;
+    }
+    .box {
+      background: #ffffff;
+      padding: 16px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .plan {
+      border-left: 4px solid #2563eb;
+      background: #eff6ff;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    .muted {
+      color: #666;
+      font-size: 0.9em;
+    }
   </style>
 </head>
 
 <body>
 
-<h1>LV – stabiele basis</h1>
+<h1>LV – Tijdvakken per Planstraße</h1>
 
-<input type="file" id="file" accept=".pdf"><br>
-<button onclick="leesLV()">Lees LV</button>
+<div class="box">
+  <h2>1. LV lezen</h2>
+  <input type="file" id="file" accept=".pdf"><br>
+  <button onclick="leesLV()">Lees LV</button>
+  <textarea id="lvText" placeholder="LV-tekst verschijnt hier..."></textarea>
+</div>
 
-<textarea id="lvText" placeholder="LV-tekst verschijnt hier..."></textarea>
+<div class="box">
+  <h2>2. Tijdvakken uit LV</h2>
+  <button onclick="toonTijdvakken()">Toon LV‑tijdvakken</button>
+  <div id="result"></div>
+</div>
 
 <script>
+/* ================= LV LEZEN ================= */
 async function leesLV() {
   const f = document.getElementById("file").files[0];
   if (!f) {
@@ -47,8 +84,68 @@ async function leesLV() {
     text += "\n";
   }
 
-  document.getElementById("lvText").value =
-    text || "[PDF bevat geen tekstlaag]";
+  document.getElementById("lvText").value = text;
+}
+
+/* ================= TIJDVAKKEN PER PLANSTRASSE ================= */
+function toonTijdvakken() {
+  const text = document.getElementById("lvText").value;
+  const out = document.getElementById("result");
+  out.innerHTML = "";
+
+  if (!text.trim()) {
+    out.textContent = "Geen LV-tekst beschikbaar.";
+    return;
+  }
+
+  /* Planstraße A / B / C … */
+  const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
+
+  /* Alle gebruikelijke LV‑tijdsaanduidingen */
+  const tijdRegex =
+    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
+      \d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(–|-|bis|t\/m)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
+      ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
+      bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
+      KW\s*\d+\s*(–|-)\s*\d+)/gi;
+
+  const data = {};
+  let m;
+
+  while ((m = planRegex.exec(text)) !== null) {
+    const plan = "Planstraße " + m[2];
+    if (!data[plan]) data[plan] = [];
+
+    const fragment = text.substring(m.index, m.index + 1500);
+    let t;
+    while ((t = tijdRegex.exec(fragment)) !== null) {
+      if (!data[plan].includes(t[0])) {
+        data[plan].push(t[0]);
+      }
+    }
+  }
+
+  if (!Object.keys(data).length) {
+    out.textContent = "Geen Planstraßen gevonden.";
+    return;
+  }
+
+  let index = 1;
+  Object.entries(data).forEach(([plan, tijden]) => {
+    const div = document.createElement("div");
+    div.className = "plan";
+
+    div.innerHTML = `
+      <strong>${index}. ${plan}</strong>
+      ${
+        tijden.length
+          ? `<ul>${tijden.map(x => `<li>${x}</li>`).join("")}</ul>`
+          : `<p class="muted">Geen tijdvakken gevonden in LV</p>`
+      }
+    `;
+    out.appendChild(div);
+    index++;
+  });
 }
 </script>
 
