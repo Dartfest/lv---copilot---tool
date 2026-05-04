@@ -2,71 +2,10 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>LV – leestest</title>
-
-  <!-- ✅ pdf.js correct -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdfpt>
-
-  <style>
-    body { font-family: Arial, sans-serif; padding:20px; }
-    textarea {
-      width:100%;
-      min-height:300px;
-      font-family: monospace;
-      white-space: pre-wrap;
-    }
-    button { padding:6px 12px; margin-top:8px; }
-  </style>
+  <title>LV – test basis</title>
 </head>
 <body>
-
-<h1>LV – leestest</h1>
-
-<input type="file" id="file" accept=".pdf"><br>
-<button onclick="leesLV()">Lees LV</button>
-
-<textarea id="output" placeholder="Hier moet LV-tekst verschijnen..."></textarea>
-
-<script>
-async function leesLV() {
-  const f = document.getElementById("file").files[0];
-  if (!f) {
-    alert("Kies eerst een PDF");
-    return;
-  }
-
-  try {
-    const buffer = await f.arrayBuffer();
-
-    const pdf = await pdfjsLib.getDocument({
-      data: buffer,
-      disableWorker: true   // ✅ cruciaal op GitHub Pages
-    }).promise;
-
-    let text = "";
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-
-      text += `--- Pagina ${i} ---\n`;
-      for (const item of content.items) {
-        text += item.str + "\n";
-      }
-      text += "\n";
-    }
-
-    document.getElementById("output").value =
-      text || "[PDF heeft geen leesbare tekstlaag]";
-
-  } catch (e) {
-    document.getElementById("output").value =
-      "❌ Fout bij lezen: " + e.message;
-    console.error(e);
-  }
-}
-</script>
-
+  <h1>✅ Als je dit ziet is HTML correct</h1>
+  <p>Dit is een harde test. Er staan geen scripts in.</p>
 </body>
 </html>
-``
