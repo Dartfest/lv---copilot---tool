@@ -2,274 +2,149 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Tender Engine v2</title>
+<title>LV Tool (Simple Pro)</title>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:150px; }
+input, textarea { width:100%; margin:5px 0; }
+button { margin:5px 0; }
 
-.section {
-  background:#fff;
-  padding:15px;
-  margin:10px 0;
-  border-left:5px solid #2563eb;
-}
-
-.bar { height:18px; border-radius:4px; }
-.critical { background:#dc2626; }
-.normal { background:#2563eb; }
-
-.risk-high { color:#dc2626; font-weight:bold; }
-.risk-mid { color:#f59e0b; font-weight:bold; }
-.risk-low { color:#16a34a; font-weight:bold; }
-
-.grid {
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
-}
+.section { background:#fff; padding:10px; margin:10px 0; }
+.bar { height:16px; border-radius:4px; }
+.critical { background:red; }
+.normal { background:blue; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Tender Engine v2</h1>
+<h1>LV Tool</h1>
 
-<input type="file" id="file">
-<button onclick="leesLV()">Lees PDF</button>
+<div id="login">
+<h3>Login</h3>
+<input id="user" placeholder="gebruikersnaam">
+<button onclick="login()">Start</button>
+</div>
+
+<div id="app" style="display:none;">
+
+<h3>Nieuw project</h3>
+<input id="projectName" placeholder="Project naam">
+<textarea id="lvText" placeholder="Plak hier je LV tekst"></textarea>
+<button onclick="saveProject()">Opslaan</button>
 <button onclick="analyse()">Analyse</button>
 <button onclick="exportPDF()">Export PDF</button>
 
-<br><br>
-<label>API key (optioneel):</label>
-<input type="password" id="apiKey">
+<h3>Projecten</h3>
+<div id="projects"></div>
 
-<textarea id="lvText"></textarea>
+<div id="result"></div>
 
-<div id="dashboard"></div>
+</div>
 
 <script>
 
-// ================= PDF =================
-async function leesLV(){
-  const f = document.getElementById("file").files[0];
-  const buffer = await f.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:buffer}).promise;
+let currentUser="";
 
-  let text="";
-  for(let i=1;i<=pdf.numPages;i++){
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    content.items.forEach(it => text += it.str + " ");
-  }
+// ===== LOGIN =====
+function login(){
+  currentUser=document.getElementById("user").value;
+  localStorage.setItem("user",currentUser);
 
-  document.getElementById("lvText").value = text;
+  document.getElementById("login").style.display="none";
+  document.getElementById("app").style.display="block";
+
+  loadProjects();
 }
 
-// ================= FASES =================
-function fases(text){
-  let arr=[];
-  let r=/(\d+)\.\s*bauabschnitt/gi;
-  let m;
-  while((m=r.exec(text))){
-    arr.push({naam:"Fase "+m[1], predecessors:[]});
-  }
-  if(arr.length===0) arr.push({naam:"Project", predecessors:[]});
-  return arr;
-}
+// ===== SAVE =====
+function saveProject(){
 
-// ================= DEPENDENCIES =================
-function dependencies(text,f){
-  if(text.includes("nicht parallel") || text.includes("nach fertigstellung")){
-    for(let i=1;i<f.length;i++) f[i].predecessors.push(i-1);
-  }
-  return f;
-}
+  let projects = JSON.parse(localStorage.getItem("projects")||"[]");
 
-// ================= DATUM =================
-const maandMap={
-  januar:0,februar:1,märz:2,april:3,mai:4,juni:5,
-  juli:6,august:7,september:8,oktober:9,november:10,dezember:11
-};
-
-function dates(text){
-  let r=/(juni|juli|august|mai|april|märz)\s+(20\d{2})/gi;
-  let d=[],m;
-  while((m=r.exec(text))){
-    d.push(new Date(m[2], maandMap[m[1]],1));
-  }
-  return d.sort((a,b)=>a-b);
-}
-
-// ================= CPM =================
-function cpm(f,d){
-
-  f.forEach((x,i)=>{
-    x.duur = (d[i]&&d[i+1]) ? (d[i+1]-d[i])/(1000*60*60*24) : 30;
-    x.ES=0; x.EF=0; x.LS=0; x.LF=0; x.slack=0;
+  projects.push({
+    user:currentUser,
+    name:document.getElementById("projectName").value,
+    text:document.getElementById("lvText").value
   });
 
-  f.forEach((x,i)=>{
-    if(x.predecessors.length){
-      x.ES=Math.max(...x.predecessors.map(p=>f[p].EF));
-    }
-    x.EF=x.ES+x.duur;
-  });
-
-  let total=Math.max(...f.map(x=>x.EF));
-
-  for(let i=f.length-1;i>=0;i--){
-    let x=f[i];
-    x.LF=total;
-    x.LS=x.LF-x.duur;
-    x.slack=x.LS-x.ES;
-  }
-
-  return {f,total};
+  localStorage.setItem("projects",JSON.stringify(projects));
+  loadProjects();
 }
 
-// ================= RISICO =================
-function risicoScore(text){
-  let s=0;
-  if(text.includes("nicht vergütet")) s+=2;
-  if(text.includes("drittfirmen")) s+=2;
-  if(text.includes("unterbrechung")) s+=1;
+// ===== LOAD =====
+function loadProjects(){
 
-  if(s>=4) return ["HOOG","risk-high"];
-  if(s>=2) return ["MIDDEL","risk-mid"];
-  return ["LAAG","risk-low"];
+  let projects = JSON.parse(localStorage.getItem("projects")||"[]");
+
+  document.getElementById("projects").innerHTML =
+    projects.filter(p=>p.user===currentUser).map(p=>`
+      <div class="section">
+        <b>${p.name}</b>
+        <button onclick="openProject('${p.text}')">Open</button>
+      </div>
+    `).join("");
 }
 
-// ================= CLAIMS =================
-function claims(text){
-  let c=[];
-  if(text.includes("drittfirmen"))
-    c.push("Vertraging derden → claimbaar");
-  if(text.includes("nicht vergütet"))
-    c.push("Niet vergoede posten → check meerwerk");
-  if(text.includes("unterbrechung"))
-    c.push("Onderbreking → mogelijk kostenclaim");
-  return c;
+function openProject(text){
+  document.getElementById("lvText").value=text;
 }
 
-// ================= ACTIES =================
-function acties(text){
-  let a=[];
-  if(text.includes("drittfirmen"))
-    a.push("Afstemmen met nutsbedrijven");
-  if(text.includes("nicht parallel"))
-    a.push("Strikte fasering");
-  if(text.includes("unterbrechung"))
-    a.push("Kosten onderbreking berekenen");
-  return a;
-}
-
-// ================= AI =================
-async function aiAnalyse(text, key){
-
-  const prompt = `
-Analyseer dit LV als senior werkvoorbereider.
-Geef:
-- samenvatting
-- grootste risico's
-- belangrijkste acties
-`;
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions",{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "Authorization":"Bearer "+key
-    },
-    body:JSON.stringify({
-      model:"gpt-4o-mini",
-      messages:[{role:"user",content:prompt+"\n\n"+text}]
-    })
-  });
-
-  const data=await res.json();
-  return data.choices[0].message.content;
-}
-
-// ================= MAIN =================
-async function analyse(){
+// ===== ANALYSE =====
+function analyse(){
 
   let t=document.getElementById("lvText").value.toLowerCase();
-  let key=document.getElementById("apiKey").value;
 
-  let f=dependencies(t,fases(t));
-  let d=dates(t);
-  let res=cpm(f,d);
+  let risico=[];
+  let claims=[];
+  let acties=[];
 
-  let gantt="";
-  res.f.forEach(x=>{
-    let w=(x.duur/res.total)*100;
-    let l=(x.ES/res.total)*100;
-
-    gantt+=`
-    <div>
-      ${x.naam}
-      <div class="bar ${x.slack===0?'critical':'normal'}"
-           style="width:${w}%; margin-left:${l}%"></div>
-    </div>`;
-  });
-
-  let risico=risicoScore(t);
-  let claim=claims(t);
-  let actie=acties(t);
-
-  let aiText="";
-  if(key){
-    aiText = await aiAnalyse(t,key);
+  if(t.includes("drittfirmen")){
+    risico.push("Afhankelijkheid derden");
+    claims.push("Vertraging derden → claimbaar");
+    acties.push("Afstemmen met nutsbedrijven");
   }
 
-  document.getElementById("dashboard").innerHTML=`
+  if(t.includes("nicht vergütet")){
+    risico.push("Kosten niet vergoed");
+    claims.push("Meerwerk mogelijk");
+  }
 
+  if(t.includes("nicht parallel")){
+    risico.push("Geen parallel werk");
+    acties.push("Strikte fasering");
+  }
+
+  let html=`
   <div class="section">
-    <h3>Planning</h3>
-    ${gantt}
-  </div>
-
-  <div class="grid">
-
-    <div class="section">
-      <h3>Risico</h3>
-      <p class="${risico[1]}">${risico[0]}</p>
-    </div>
-
-    <div class="section">
-      <h3>Kostenindicatie</h3>
-      <p>${risico[0]==="HOOG"?"€50k+":"€10k-50k"}</p>
-    </div>
-
+    <h3>Risico's</h3>
+    <ul>${risico.map(r=>`<li>${r}</li>`).join("")}</ul>
   </div>
 
   <div class="section">
     <h3>Claims</h3>
-    <ul>${claim.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <ul>${claims.map(c=>`<li>${c}</li>`).join("")}</ul>
   </div>
 
   <div class="section">
     <h3>Acties</h3>
-    <ul>${actie.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <ul>${acties.map(a=>`<li>${a}</li>`).join("")}</ul>
   </div>
-
-  ${aiText?`<div class="section"><h3>AI Analyse</h3>${aiText}</div>`:""}
-
   `;
+
+  document.getElementById("result").innerHTML=html;
 }
 
-// ================= PDF =================
+// ===== PDF =====
 function exportPDF(){
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  doc.text("LV Analyse v2",10,10);
-  doc.text(document.getElementById("dashboard").innerText,10,20);
+  doc.text("LV Analyse",10,10);
+  doc.text(document.getElementById("result").innerText,10,20);
 
   doc.save("analyse.pdf");
 }
