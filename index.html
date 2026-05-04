@@ -2,42 +2,41 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Planning Engine</title>
+<title>LV AI Tender Engine</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:180px; }
-button { padding:8px 14px; margin:6px; }
-.box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
+textarea { width:100%; height:160px; }
+button { padding:8px 12px; margin:6px; }
 
-.gantt { margin-top:20px; }
-.row { margin:8px 0; }
-.bar {
-  height:20px;
-  background:#2563eb;
-  display:inline-block;
-  border-radius:4px;
-}
-.critical {
-  background:#b91c1c;
-}
-.label { display:inline-block; width:220px; }
+.section { background:#fff; padding:15px; margin:10px 0; border-left:5px solid #2563eb; }
 
+.bar { height:20px; border-radius:4px; }
+.critical { background:#b91c1c; }
+.normal { background:#2563eb; }
+
+.risk { color:#b91c1c; font-weight:bold; }
+
+.row { margin:10px 0; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Planning Engine (Datum + Kritieke Pad)</h1>
+<h1>LV AI Tender Engine (Hybride)</h1>
 
-<div class="box">
-<input type="file" id="file" accept=".pdf">
+<input type="file" id="file">
 <button onclick="leesLV()">Lees PDF</button>
-<button onclick="analyse()">Analyse Planning</button>
+<button onclick="analyse()">Analyse</button>
+<button onclick="exportPDF()">Export PDF</button>
+
+<br>
+<label><input type="checkbox" id="useAI"> Gebruik AI (optioneel)</label>
+
 <textarea id="lvText"></textarea>
-</div>
 
 <div id="result"></div>
 
@@ -61,95 +60,185 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== DATUM PARSE =====
+// ===== ACTIVITEITEN =====
+function extractFases(text){
+  let fases=[];
+  let regex = /(\d+)\.\s*bauabschnitt/gi;
+  let m;
+
+  while((m=regex.exec(text))){
+    fases.push({ naam:"Fase "+m[1], predecessors:[] });
+  }
+
+  if(fases.length===0)
+    fases.push({ naam:"Project", predecessors:[] });
+
+  return fases;
+}
+
+// ===== DEPENDENCY PARSER =====
+function parseDependencies(text, fases){
+
+  if(text.includes("nicht parallel")){
+    for(let i=1;i<fases.length;i++){
+      fases[i].predecessors.push(i-1);
+    }
+  }
+
+  if(text.includes("nach fertigstellung")){
+    for(let i=1;i<fases.length;i++){
+      fases[i].predecessors.push(i-1);
+    }
+  }
+
+  if(text.includes("teil 1") && text.includes("teil 2")){
+    fases.forEach((f,i)=>{
+      if(f.naam.includes("1") && fases[i+1]){
+        fases[i+1].predecessors.push(i);
+      }
+    });
+  }
+
+  return fases;
+}
+
+// ===== DATUM =====
 const maandMap = {
   januar:0,februar:1,märz:2,april:3,mai:4,juni:5,
   juli:6,august:7,september:8,oktober:9,november:10,dezember:11
 };
 
-function parseMaand(match){
-  return new Date(match[2], maandMap[match[1]], 1);
+function parseDates(text){
+  const regex = /(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(20\d{2})/gi;
+  let m, dates=[];
+
+  while((m=regex.exec(text))){
+    dates.push(new Date(m[2], maandMap[m[1]],1));
+  }
+
+  return dates.sort((a,b)=>a-b);
 }
 
-// ===== ANALYSE =====
-function analyse(){
+// ===== CPM =====
+function runCPM(fases, dates){
+
+  fases.forEach((f,i)=>{
+    f.duur = (dates[i] && dates[i+1])
+      ? (dates[i+1]-dates[i])/(1000*60*60*24)
+      : 30;
+
+    f.ES=0; f.EF=0; f.LS=0; f.LF=0; f.slack=0;
+  });
+
+  fases.forEach((f,i)=>{
+    if(f.predecessors.length){
+      f.ES = Math.max(...f.predecessors.map(p=>fases[p].EF));
+    }
+    f.EF = f.ES + f.duur;
+  });
+
+  const total = Math.max(...fases.map(f=>f.EF));
+
+  for(let i=fases.length-1;i>=0;i--){
+    let f=fases[i];
+
+    if(i===fases.length-1){
+      f.LF = total;
+    } else {
+      const succ = fases
+        .map((x,j)=>x.predecessors.includes(i)?j:null)
+        .filter(x=>x!==null);
+
+      f.LF = succ.length
+        ? Math.min(...succ.map(s=>fases[s].LS))
+        : total;
+    }
+
+    f.LS = f.LF - f.duur;
+    f.slack = f.LS - f.ES;
+  }
+
+  return { fases, total };
+}
+
+// ===== RISICO =====
+function detectRisico(text){
+
+  let r=[];
+  if(text.includes("nicht parallel"))
+    r.push("Geen parallel werken mogelijk");
+
+  if(text.includes("nicht vergütet"))
+    r.push("Kosten niet vergoed");
+
+  if(text.includes("drittfirmen"))
+    r.push("Afhankelijkheid derden");
+
+  return r;
+}
+
+// ===== AI HOOK =====
+async function aiAnalyse(text){
+  // later API hier
+  return null;
+}
+
+// ===== MAIN =====
+let analyseData={};
+
+async function analyse(){
 
   const text = document.getElementById("lvText").value.toLowerCase();
 
-  // ===== FASES =====
-  let fases = [];
-  let regex = /(\d+)\.\s*bauabschnitt/gi;
-  let m;
+  let fases = extractFases(text);
+  fases = parseDependencies(text, fases);
 
-  while((m = regex.exec(text))){
-    fases.push({
-      naam: "Fase " + m[1],
-      start:null,
-      end:null
-    });
-  }
+  const dates = parseDates(text);
+  const { fases:res, total } = runCPM(fases, dates);
 
-  if(fases.length === 0){
-    fases.push({naam:"Project", start:null, end:null});
-  }
+  const risico = detectRisico(text);
 
-  // ===== DATUMS =====
-  let maandRegex = /(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(20\d{2})/gi;
-  let dates = [];
-  let d;
+  let html="";
 
-  while((d = maandRegex.exec(text))){
-    dates.push(parseMaand(d));
-  }
+  res.forEach(f=>{
+    const width = (f.duur/total)*100;
+    const left = (f.ES/total)*100;
 
-  dates.sort((a,b)=>a-b);
-
-  // ===== VERDELEN OVER FASES =====
-  fases.forEach((f,i)=>{
-    f.start = dates[i] || null;
-    f.end = dates[i+1] || null;
-  });
-
-  // ===== MIN/MAX =====
-  const validDates = dates.filter(d=>d);
-  const minDate = validDates[0];
-  const maxDate = validDates[validDates.length-1];
-
-  const totalDays = (maxDate - minDate) / (1000*60*60*24);
-
-  // ===== CRITICAL PATH =====
-  const sequential = text.includes("nicht parallel");
-
-  // ===== GANTT =====
-  let html = "<div class='gantt'>";
-
-  fases.forEach(f=>{
-
-    if(!f.start || !f.end) return;
-
-    const startOffset = (f.start - minDate) / (1000*60*60*24);
-    const duration = (f.end - f.start) / (1000*60*60*24);
-
-    const left = (startOffset / totalDays) * 100;
-    const width = (duration / totalDays) * 100;
-
-    html += `
+    html+=`
     <div class="row">
-      <span class="label">${f.naam}</span>
-      <div class="bar ${sequential ? 'critical' : ''}"
-           style="margin-left:${left}%; width:${width}%"></div>
-    </div>
-    `;
+      ${f.naam}
+      <div class="bar ${f.slack===0?'critical':'normal'}"
+           style="width:${width}%; margin-left:${left}%"></div>
+      <div>Slack: ${f.slack.toFixed(0)}</div>
+    </div>`;
   });
 
-  html += "</div>";
+  document.getElementById("result").innerHTML=`
 
-  // ===== OUTPUT =====
-  document.getElementById("result").innerHTML = `
-  <h3>Planning (Gantt)</h3>
-  ${html}
-  <p><b>Kritieke pad:</b> ${sequential ? "Ja (lineair project)" : "Onbekend / parallel mogelijk"}</p>
+  <div class="section">
+    <h3>Planning (CPM)</h3>
+    ${html}
+    <p><b>Kritieke pad:</b> rood</p>
+  </div>
+
+  <div class="section">
+    <h3>Risico's</h3>
+    <ul class="risk">
+    ${risico.map(r=>`<li>${r}</li>`).join("")}
+    </ul>
+  </div>
   `;
+}
+
+// ===== PDF =====
+function exportPDF(){
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.text("LV Analyse",10,10);
+
+  doc.save("analyse.pdf");
 }
 
 </script>
