@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool (volledig)</title>
+<title>LV Analyse Tool (compleet)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
@@ -21,7 +21,7 @@ button { padding:8px 14px; margin:8px 0; }
 
 <body>
 
-<h1>LV Analyse (compleet + NL vertaling)</h1>
+<h1>LV Analyse (tijdlijn + risico + NL)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -46,6 +46,7 @@ async function vertaal(t){
 
   await new Promise(r => setTimeout(r, 150));
 
+  // LibreTranslate
   try{
     const res = await fetch("https://libretranslate.de/translate", {
       method: "POST",
@@ -56,6 +57,7 @@ async function vertaal(t){
     if(data.translatedText) return cache[t] = data.translatedText;
   }catch(e){}
 
+  // MyMemory fallback
   try{
     const res2 = await fetch(
       "https://api.mymemory.translated.net/get?q=" 
@@ -67,7 +69,7 @@ async function vertaal(t){
     }
   }catch(e){}
 
-  // fallback woordenboek
+  // basis fallback
   let r = t.toLowerCase();
   const dict = {
     "arbeiten":"werkzaamheden","bau":"bouw","kanal":"riolering",
@@ -76,6 +78,7 @@ async function vertaal(t){
     "abgestimmt":"afgestemd"
   };
   Object.keys(dict).forEach(k=> r = r.replaceAll(k, dict[k]));
+
   return cache[t] = r;
 }
 
@@ -115,6 +118,7 @@ function samenvatting(frag){
 function mergeTijd(tijd){
   if(!tijd.length) return [];
   tijd.sort((a,b)=>a.start-b.start);
+
   let merged=[tijd[0]];
 
   for(let i=1;i<tijd.length;i++){
@@ -141,19 +145,47 @@ function berekenGaten(tijd){
   return gaps;
 }
 
-// ================= RISICO =================
-function risico(d){
-  let r=[];
+// ================= TOTAAL PERIODE =================
+function totaalPeriode(tijd){
 
-  if(d.tijd.length>1) r.push("Meerdere fasen (mogelijke overlap)");
-  if(!d.tijd.length) r.push("Geen planning gevonden");
+  if(!tijd.length) return null;
 
-  d.tijd.forEach(t=>{
-    let days=(t.end-t.start)/(1000*60*60*24);
-    if(days<7) r.push("Zeer korte fase");
+  let start = tijd[0].start;
+  let end = tijd[0].end;
+
+  tijd.forEach(t=>{
+    if(t.start < start) start = t.start;
+    if(t.end > end) end = t.end;
   });
 
-  return r.length? r:["Geen bijzonderheden"];
+  return {start, end};
+}
+
+// ================= RISICO =================
+function risico(d, gaps){
+
+  let r=[];
+
+  if(d.tijd.length > 1){
+    r.push("Gefaseerde uitvoering → extra afstemming nodig");
+  }
+
+  if(gaps.length){
+    r.push("Onderbrekingen in planning → kans op stilstand");
+  }
+
+  d.tijd.forEach(t=>{
+    let days = (t.end - t.start)/(1000*60*60*24);
+    if(days < 7){
+      r.push("Zeer korte fase → hoge werkdruk / faalkans");
+    }
+  });
+
+  if(!d.tijd.length){
+    r.push("Geen duidelijke planning → uitvoeringsrisico");
+  }
+
+  return r.length ? r : ["Geen directe risico’s zichtbaar"];
 }
 
 // ================= ANALYSE =================
@@ -192,12 +224,19 @@ async function analyse(){
 
     d.tijd = mergeTijd(d.tijd);
     const gaps = berekenGaten(d.tijd);
+    const totaal = totaalPeriode(d.tijd);
 
     const div=document.createElement("div");
     div.className="plan";
 
     div.innerHTML=`
     <strong>${plan}</strong>
+
+    ${
+      totaal
+      ? `<p><b>Periode totaal:</b> ${totaal.start.toLocaleDateString()} → ${totaal.end.toLocaleDateString()}</p>`
+      : `<p class="muted">Geen totale periode</p>`
+    }
 
     <b>Fasen:</b>
     ${d.tijd.map((t,i)=>`
@@ -211,7 +250,7 @@ async function analyse(){
       : `<div class="muted">Geen</div>`}
 
     <b>Risico's:</b>
-    ${risico(d).map(r=>`<div class="risk">${r}</div>`).join("")}
+    ${risico(d,gaps).map(r=>`<div class="risk">${r}</div>`).join("")}
 
     <b>Werkzaamheden:</b>
     <ul class="werk"></ul>
