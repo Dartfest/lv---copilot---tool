@@ -5,9 +5,9 @@
 <title>LV Copilot Tool – Integrale Werkvoorbereiding Infra</title>
 
 <!-- PDF.js -->
-https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
+<script src=".cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js</script>
 <!-- jsPDF -->
-https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f5f7fa; padding:20px; }
@@ -40,10 +40,10 @@ button.secondary { background:#6b7280; }
 </div>
 
 <div class="box">
-<h2>3. Kabels & Leidingen (projectbreed)</h2>
+<h2>3. Kabels & Leidingen (PDF / TXT)</h2>
 <input type="file" id="klFiles" multiple>
 <button class="secondary" onclick="readKLFiles()">Lees K&L</button>
-<div id="klData"></div>
+<div id="klData" class="small"></div>
 </div>
 
 <div class="box">
@@ -58,25 +58,87 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 let KL_TEXT = "";
 
-async function readLVFiles(){
-  const files = lvFiles.files;
-  let txt="";
-  for(const f of files){
-    const r=new FileReader();
-    await new Promise(res=>{
-      r.onload=async()=>{
-        const pdf=await pdfjsLib.getDocument(new Uint8Array(r.result)).promise;
-        for(let i=1;i<=pdf.numPages;i++){
-          const p=await pdf.getPage(i);
-          const c=await p.getTextContent();
-          txt+=c.items.map(it=>it.str).join(" ")+"\n";
-        }
-        res();
-      };
-      r.readAsArrayBuffer(f);
-    });
-  }
-  lvtext.value=txt;
+async function readPDFFile(file) {
+  const reader = new FileReader();
+  return new Promise(resolve => {
+    reader.onload = async () => {
+      const pdf = await pdfjsLib.getDocument(new Uint8Array(reader.result)).promise;
+      let t = "";
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const c = await page.getTextContent();
+        t += c.items.map(i => i.str).join(" ") + "\n";
+      }
+      resolve(t);
+    };
+    reader.readAsArrayBuffer(file);
+  });
 }
 
-function readKLFiles(){
+/* ===== LV ===== */
+async function readLVFiles(){
+  const files = lvFiles.files;
+  if(!files.length){ alert("Geen LV bestanden"); return; }
+  let txt="";
+  for(const f of files){
+    txt += await readPDFFile(f);
+  }
+  lvtext.value = txt;
+}
+
+/* ===== K&L ===== */
+async function readKLFiles(){
+  const files = klFiles.files;
+  if(!files.length){ alert("Geen K&L bestanden"); return; }
+  let txt="";
+  for(const f of files){
+    if(f.type === "application/pdf"){
+      txt += await readPDFFile(f);
+    } else {
+      txt += await f.text();
+    }
+  }
+  KL_TEXT = txt.toLowerCase();
+  klData.innerText = "K&L bestanden ingelezen";
+}
+
+/* ===== Analyse ===== */
+function splitIntoChunks(){
+  chunks.innerHTML="";
+  const parts = lvtext.value.match(/[\s\S]{1,3000}/g) || [];
+  parts.forEach((p,i)=>{
+    const nets = ["gas","elektra","water","riool","telecom","warmte"]
+      .filter(n => (p+KL_TEXT).toLowerCase().includes(n));
+
+    let impact = "green", label="LAAG";
+    if(nets.includes("gas") || nets.includes("elektra")){ impact="red"; label="HOOG"; }
+    else if(nets.length>1){ impact="orange"; label="MIDDEL"; }
+
+    const d=document.createElement("div");
+    d.className=`chunk ${impact}`;
+    d.innerHTML=`
+<strong>DEEL ${i+1}</strong><br>
+Kabels & leidingen: ${nets.join(", ")||"–"}<br>
+Impact: <strong>${label}</strong><br><br>
+<pre>${p}</pre>`;
+    chunks.appendChild(d);
+  });
+}
+
+/* ===== PDF Export ===== */
+function exportPDF(){
+  const { jsPDF } = window.jspdf;
+  const pdf=new jsPDF();
+  let y=10;
+  pdf.text("Uitvoerdersoverzicht LV",10,y);
+  y+=10;
+  document.querySelectorAll(".chunk").forEach(c=>{
+    pdf.text(c.innerText,10,y);
+    y+=60;
+  });
+  pdf.save("uitvoerder-overzicht.pdf");
+}
+</script>
+
+</body>
+</html>
