@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>LV – Planstraße samenvatting</title>
 
-  <!-- ✅ pdf.js (bewezen werkend) -->
+  <!-- ✅ pdf.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
@@ -82,24 +82,45 @@ function analyse() {
   }
 
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
-  const periodeRegex =
+
+  // Exacte datum-ranges (van–tot)
+  const exactPeriodeRegex =
     /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(bis|–|-|t\/m)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
+
+  // Overige LV-periodes
+  const tekstPeriodeRegex =
+    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (KW\s*\d+\s*(–|-)\s*\d+)|
+     ((Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s*\d{4})/gi;
 
   const data = {};
   let m;
 
   while ((m = planRegex.exec(text)) !== null) {
     const plan = "Planstraße " + m[2];
-    if (!data[plan]) data[plan] = { periodes: [], start: null, end: null };
+    if (!data[plan]) {
+      data[plan] = { periodes: [], start: null, end: null };
+    }
 
-    const frag = text.substring(m.index, m.index + 1200);
+    const frag = text.substring(m.index, m.index + 1500);
     let p;
-    while ((p = periodeRegex.exec(frag)) !== null) {
+
+    // Exacte periodes → bepalen van/tot
+    while ((p = exactPeriodeRegex.exec(frag)) !== null) {
       data[plan].periodes.push(p[0]);
       const s = parseDate(p[1]);
       const e = parseDate(p[3]);
       if (s && (!data[plan].start || s < data[plan].start)) data[plan].start = s;
       if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
+    }
+
+    // Tekstuele periodes → alleen tonen
+    while ((p = tekstPeriodeRegex.exec(frag)) !== null) {
+      if (!data[plan].periodes.includes(p[0])) {
+        data[plan].periodes.push(p[0]);
+      }
     }
   }
 
@@ -118,7 +139,7 @@ function analyse() {
     const periode =
       d.start && d.end
         ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
-        : `<p class="muted">Geen exact tijdvak vermeld in LV</p>`;
+        : `<p class="muted">Geen exact datum‑tijdvak in LV vermeld</p>`;
 
     div.innerHTML = `
       <strong>${i+1}. ${p}</strong>
