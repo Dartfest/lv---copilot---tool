@@ -2,11 +2,13 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>LV – Tijdvakken per Planstraße</title>
+  <title>LV – Planstraße samenvatting</title>
 
-  <!-- ✅ pdf.js CORRECT -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdftyle>
-    body { font-family: Arial, sans-serif; padding: 20px; background:#f4f6f8; }
+  <!-- pdf.js (FIXED) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; padding:20px; background:#f4f6f8; }
     textarea { width:100%; height:260px; font-family:monospace; white-space:pre-wrap; }
     button { padding:6px 12px; margin:6px 0; }
     .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
@@ -16,28 +18,30 @@
       padding:10px;
       margin:10px 0;
     }
-    .muted { color:#666; font-size:0.9em; }
+    .muted { color:#555; font-size:0.9em; }
   </style>
 </head>
 
 <body>
 
-<h1>LV – Tijdvakken per Planstraße</h1>
+<h1>LV – Planstraße samenvatting & tijdvakken</h1>
 
 <div class="box">
   <h2>1. LV lezen</h2>
   <input type="file" id="file" accept=".pdf"><br>
   <button onclick="leesLV()">Lees LV</button>
-  <textarea id="lvText" placeholder="LV-tekst verschijnt hier..."></textarea>
+  <textarea id="lvText" placeholder="LV-tekst verschijnt hier…"></textarea>
 </div>
 
 <div class="box">
-  <h2>2. Tijdvakken uit LV</h2>
-  <button onclick="toonTijdvakken()">Toon LV‑tijdvakken</button>
+  <h2>2. Analyse</h2>
+  <button onclick="analyse()">Analyseer Planstraßen</button>
   <div id="result"></div>
 </div>
 
 <script>
+
+// ---------------- PDF LEZEN ----------------
 async function leesLV() {
   const f = document.getElementById("file").files[0];
   if (!f) return alert("Kies eerst een PDF");
@@ -61,54 +65,124 @@ async function leesLV() {
   document.getElementById("lvText").value = text;
 }
 
-function toonTijdvakken() {
+// ---------------- DATUM PARSEN ----------------
+function parseDate(d) {
+  const p = d.split(/[.\-]/);
+  if (p.length !== 3) return null;
+  return new Date(p[2], p[1] - 1, p[0]);
+}
+
+// ---------------- SAMENVATTING ----------------
+function maakSamenvatting(frag) {
+  const regels = frag.split("\n");
+
+  const keywords = [
+    "bau", "herstellung", "rückbau", "lieferung",
+    "einbau", "arbeiten", "maßnahme", "leistung",
+    "asphalt", "kanal", "kabel", "leitung"
+  ];
+
+  let hits = [];
+
+  regels.forEach(r => {
+    const lower = r.toLowerCase();
+    if (keywords.some(k => lower.includes(k))) {
+      hits.push(r.trim());
+    }
+  });
+
+  return hits.slice(0, 5);
+}
+
+// ---------------- ANALYSE ----------------
+function analyse() {
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("result");
   out.innerHTML = "";
 
-  if (!text.trim()) {
-    out.textContent = "Geen LV‑tekst beschikbaar.";
-    return;
-  }
-
   const planRegex = /Planstra(ß|ss)e[\s\u00A0]+([A-Z])/gi;
-  const tijdRegex =
-    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
-      \d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(–|-|bis|t\/m)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
-      ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
-      bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|
-      KW\s*\d+\s*(–|-)\s*\d+)/gi;
+
+  const exactRegex =
+    /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})\s*(bis|–|-|t\/m)\s*(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
+
+  const tekstRegex =
+    /(vom\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|ab\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}|KW\s*\d+\s*(–|-)\s*\d+)/gi;
 
   const data = {};
   let m;
 
   while ((m = planRegex.exec(text)) !== null) {
-    const plan = "Planstraße " + m[2];
-    if (!data[plan]) data[plan] = [];
 
-    const frag = text.substring(m.index, m.index + 1500);
-    let t;
-    while ((t = tijdRegex.exec(frag)) !== null) {
-      if (!data[plan].includes(t[0])) {
-        data[plan].push(t[0]);
+    const plan = "Planstraße " + m[2];
+
+    if (!data[plan]) data[plan] = { 
+      periodes: [], 
+      start: null, 
+      end: null,
+      samenvatting: []
+    };
+
+    const frag = text.slice(m.index, m.index + 1500);
+
+    let p;
+
+    // ---- exacte datums ----
+    while ((p = exactRegex.exec(frag))) {
+      data[plan].periodes.push(p[0]);
+
+      const s = parseDate(p[1]);
+      const e = parseDate(p[3]);
+
+      if (s && (!data[plan].start || s < data[plan].start)) data[plan].start = s;
+      if (e && (!data[plan].end || e > data[plan].end)) data[plan].end = e;
+    }
+
+    // ---- tekstuele periodes ----
+    while ((p = tekstRegex.exec(frag))) {
+      if (!data[plan].periodes.includes(p[0])) {
+        data[plan].periodes.push(p[0]);
       }
     }
+
+    // ---- samenvatting ----
+    const summary = maakSamenvatting(frag);
+    summary.forEach(s => {
+      if (!data[plan].samenvatting.includes(s)) {
+        data[plan].samenvatting.push(s);
+      }
+    });
   }
 
-  let i = 1;
-  Object.entries(data).forEach(([plan, tijden]) => {
+  // ---------------- RESULTAAT TONEN ----------------
+  Object.entries(data).forEach(([p,d], i) => {
+
     const div = document.createElement("div");
     div.className = "plan";
+
     div.innerHTML = `
-      <strong>${i}. ${plan}</strong>
-      ${tijden.length
-        ? `<ul>${tijden.map(x => `<li>${x}</li>`).join("")}</ul>`
-        : `<p class="muted">Geen tijdvakken gevonden</p>`}
+      <strong>${i+1}. ${p}</strong>
+
+      ${
+        d.start && d.end
+        ? `<p><strong>Periode:</strong> ${d.start.toLocaleDateString()} t/m ${d.end.toLocaleDateString()}</p>`
+        : `<p class="muted">Geen exact datum-tijdvak in LV vermeld</p>`
+      }
+
+      <p><strong>Samenvatting (werkzaamheden):</strong></p>
+      <ul>
+        ${d.samenvatting.map(x => `<li>${x}</li>`).join("")}
+      </ul>
+
+      <p><strong>Gevonden tijdvakken:</strong></p>
+      <ul>
+        ${d.periodes.map(x => `<li>${x}</li>`).join("")}
+      </ul>
     `;
+
     out.appendChild(div);
-    i++;
   });
 }
+
 </script>
 
 </body>
