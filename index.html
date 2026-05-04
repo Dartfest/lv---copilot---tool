@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool (Optimale NL vertaling)</title>
+<title>LV Analyse Tool (volledig)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
@@ -15,12 +15,13 @@ button { padding:8px 14px; margin:8px 0; }
 .muted { color:#666; font-size:0.9em; }
 .fase { background:#f1f5f9; padding:8px; margin:6px 0; border-radius:4px; }
 .gap { background:#fff4e5; padding:6px; margin:4px 0; border-radius:4px; }
+.risk { background:#ffe4e6; padding:6px; margin:4px 0; border-radius:4px; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse (beste gratis NL vertaling)</h1>
+<h1>LV Analyse (compleet + NL vertaling)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -43,69 +44,38 @@ async function vertaal(t){
 
   if(cache[t]) return cache[t];
 
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 150));
 
-  // ---- 1 LibreTranslate ----
   try{
     const res = await fetch("https://libretranslate.de/translate", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        q: t,
-        source: "de",
-        target: "nl"
-      })
+      body: JSON.stringify({ q: t, source: "de", target: "nl" })
     });
-
     const data = await res.json();
-
-    if(data.translatedText){
-      return cache[t] = data.translatedText;
-    }
-
+    if(data.translatedText) return cache[t] = data.translatedText;
   }catch(e){}
 
-  // ---- 2 MyMemory ----
   try{
     const res2 = await fetch(
       "https://api.mymemory.translated.net/get?q=" 
       + encodeURIComponent(t) + "&langpair=de|nl"
     );
-
     const data2 = await res2.json();
-
     if(data2.responseData?.translatedText){
       return cache[t] = data2.responseData.translatedText;
     }
-
   }catch(e){}
 
-  // ---- 3 fallback (slimme basis NL) ----
+  // fallback woordenboek
   let r = t.toLowerCase();
-
   const dict = {
-    "arbeiten":"werkzaamheden",
-    "bau":"bouw",
-    "kanal":"riolering",
-    "leitung":"leiding",
-    "kabel":"kabel",
-    "herstellung":"aanleg",
-    "rückbau":"sloop",
-    "im":"in",
-    "bis":"tot",
-    "der":"de",
-    "die":"de",
-    "das":"het",
-    "und":"en",
-    "müssen":"moeten",
-    "werden":"worden",
+    "arbeiten":"werkzaamheden","bau":"bouw","kanal":"riolering",
+    "leitung":"leiding","kabel":"kabel","herstellung":"aanleg",
+    "rückbau":"sloop","müssen":"moeten","werden":"worden",
     "abgestimmt":"afgestemd"
   };
-
-  Object.keys(dict).forEach(k=>{
-    r = r.replaceAll(k, dict[k]);
-  });
-
+  Object.keys(dict).forEach(k=> r = r.replaceAll(k, dict[k]));
   return cache[t] = r;
 }
 
@@ -134,13 +104,6 @@ function parseDate(d){
   return new Date(p[2], p[1]-1, p[0]);
 }
 
-// ================= MAANDEN =================
-const maandMap = {
-  "januar":0,"februar":1,"märz":2,"april":3,"mai":4,
-  "juni":5,"juli":6,"august":7,"september":8,
-  "oktober":9,"november":10,"dezember":11
-};
-
 // ================= SAMENVATTING =================
 function samenvatting(frag){
   const regels = frag.split("\n");
@@ -167,6 +130,32 @@ function mergeTijd(tijd){
   return merged;
 }
 
+// ================= GAPS =================
+function berekenGaten(tijd){
+  let gaps=[];
+  for(let i=1;i<tijd.length;i++){
+    if(tijd[i].start > tijd[i-1].end){
+      gaps.push({start:tijd[i-1].end,end:tijd[i].start});
+    }
+  }
+  return gaps;
+}
+
+// ================= RISICO =================
+function risico(d){
+  let r=[];
+
+  if(d.tijd.length>1) r.push("Meerdere fasen (mogelijke overlap)");
+  if(!d.tijd.length) r.push("Geen planning gevonden");
+
+  d.tijd.forEach(t=>{
+    let days=(t.end-t.start)/(1000*60*60*24);
+    if(days<7) r.push("Zeer korte fase");
+  });
+
+  return r.length? r:["Geen bijzonderheden"];
+}
+
 // ================= ANALYSE =================
 async function analyse(){
 
@@ -177,13 +166,11 @@ async function analyse(){
   const planRegex = /Planstra(ß|ss)e[\s]+([A-Z])/gi;
   const exactRegex = /(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}).*?(\d{1,2}[.\-]\d{1,2}[.\-]\d{4})/gi;
 
-  let data={};
-  let m;
+  let data={}, m;
 
   while((m=planRegex.exec(text))!==null){
 
     const plan="Planstraße "+m[2];
-
     if(!data[plan]) data[plan]={tijd:[], sam:[]};
 
     const frag = text.slice(m.index, m.index+2000);
@@ -192,9 +179,7 @@ async function analyse(){
     while((d=exactRegex.exec(frag))){
       const s=parseDate(d[1]);
       const e=parseDate(d[2]);
-      if(s&&e){
-        data[plan].tijd.push({start:s,end:e});
-      }
+      if(s&&e) data[plan].tijd.push({start:s,end:e});
     }
 
     samenvatting(frag).forEach(s=>{
@@ -206,10 +191,32 @@ async function analyse(){
   for(const [plan,d] of Object.entries(data)){
 
     d.tijd = mergeTijd(d.tijd);
+    const gaps = berekenGaten(d.tijd);
 
     const div=document.createElement("div");
     div.className="plan";
-    div.innerHTML=`<strong>${plan}</strong><ul class="werk"></ul>`;
+
+    div.innerHTML=`
+    <strong>${plan}</strong>
+
+    <b>Fasen:</b>
+    ${d.tijd.map((t,i)=>`
+      <div class="fase">
+        Fase ${i+1}: ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
+      </div>`).join("")}
+
+    <b>Onderbrekingen:</b>
+    ${gaps.length
+      ? gaps.map(g=>`<div class="gap">${g.start.toLocaleDateString()} → ${g.end.toLocaleDateString()}</div>`).join("")
+      : `<div class="muted">Geen</div>`}
+
+    <b>Risico's:</b>
+    ${risico(d).map(r=>`<div class="risk">${r}</div>`).join("")}
+
+    <b>Werkzaamheden:</b>
+    <ul class="werk"></ul>
+    `;
+
     out.appendChild(div);
 
     const lijst = div.querySelector(".werk");
