@@ -1,122 +1,313 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>LV Intelligence – Directie Demo</title>
+
+<style>
+body { font-family: Arial; margin:0; background:#eef2f7; }
+.header {
+  background:#0f172a;
+  color:#fff;
+  padding:15px;
+  font-size:22px;
+}
+.container { padding:20px; }
+
+textarea {
+  width:100%;
+  height:140px;
+  margin-bottom:10px;
+}
+
+button {
+  padding:10px 14px;
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  cursor:pointer;
+  margin-right:5px;
+}
+
+.grid {
+  display:grid;
+  grid-template-columns: repeat(4,1fr);
+  gap:10px;
+  margin-top:10px;
+}
+
+.card {
+  background:#fff;
+  padding:15px;
+  border-radius:8px;
+}
+
+.big { font-size:22px; font-weight:bold; }
+
+.high { color:#dc2626; }
+.mid { color:#f59e0b; }
+.low { color:#16a34a; }
+
+.section {
+  background:#fff;
+  padding:15px;
+  margin-top:12px;
+  border-radius:8px;
+}
+
+.bar {
+  height:20px;
+  border-radius:4px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">LV Intelligence – Executive Dashboard</div>
+
+<div class="container">
+
+<input type="file" id="pdfFile">
+<textarea id="lvText" placeholder="Plak hier LV of upload PDF"></textarea>
+
+<button onclick="analyse()">Analyse</button>
+<button onclick="exportPDF()">Export Rapport</button>
+
+<div id="out"></div>
+
+</div>
+
 <script>
 
-// ===== MAANDEN =====
+// ===== SAFE SCRIPT LOADER =====
+function loadScript(url){
+  return new Promise((res,rej)=>{
+    let s=document.createElement("script");
+    s.src=url;
+    s.onload=res;
+    s.onerror=rej;
+    document.body.appendChild(s);
+  });
+}
+
+// ===== PDF =====
+async function loadPDF(file){
+  try{
+    if(typeof pdfjsLib === "undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = async function(){
+      const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text="";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page = await pdf.getPage(i);
+        let content = await page.getTextContent();
+        text += content.items.map(i=>i.str).join(" ") + "\n";
+      }
+
+      lvText.value = text;
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  } catch {
+    alert("PDF lezen mislukt — gebruik tekst.");
+  }
+}
+
+pdfFile.addEventListener("change", e=>{
+  if(e.target.files[0]) loadPDF(e.target.files[0]);
+});
+
+// ===== DATA PARSER =====
 const months = {
-  "januar":1,"februar":2,"märz":3,"april":4,"mai":5,
-  "juni":6,"juli":7,"august":8,"september":9
+  "juni":6,"juli":7,"august":8,"mai":5
 };
 
-// ===== DATUM PARSER =====
-function parseDates(text){
-  const regex = /(januar|februar|märz|april|mai|juni|juli|august|september)\s+(20\d{2})/gi;
-  let dates=[];
+function parseDates(t){
+  let r=[];
+  let regex=/(juni|juli|august|mai)\s+(20\d{2})/gi;
   let m;
-
-  while((m = regex.exec(text))){
-    dates.push({
+  while((m=regex.exec(t))){
+    r.push({
       raw:m[0],
-      month:months[m[1]],
-      year:parseInt(m[2]),
-      value:parseInt(m[2])*12 + months[m[1]]
+      val:parseInt(m[2])*12 + months[m[1]]
     });
   }
-
-  return dates;
+  return r;
 }
 
-// ===== FASE PARSER =====
-function parsePhases(text){
-
-  let phases=[];
-  const regex = /(\d\.\s*bauabschnitt).*?planstraße\s*([a-z])/gi;
+function parsePhases(t){
+  let r=[];
+  let regex=/(\d)\.\s*bauabschnitt.*?planstraße\s*([a-z])/gi;
   let m;
-
-  while((m = regex.exec(text))){
-    phases.push({
-      name:`Fase ${m[1][0]} - Planstraat ${m[2].toUpperCase()}`
+  while((m=regex.exec(t))){
+    r.push({
+      name:`Fase ${m[1]} - Planstraat ${m[2].toUpperCase()}`
     });
   }
-
-  return phases;
+  return r;
 }
 
-// ===== PLANNING LOGICA =====
-function buildPlanning(text){
+// ===== PLANNING =====
+function buildPlanning(t){
 
-  let dates = parseDates(text);
-  let phases = parsePhases(text);
+  let dates=parseDates(t);
+  let phases=parsePhases(t);
 
-  // simpele koppeling: fase i → datum i
   for(let i=0;i<phases.length;i++){
-
-    phases[i].start = dates[i]?.value || dates[0]?.value;
-    phases[i].end   = dates[i+1]?.value || dates[dates.length-1]?.value;
-
-    phases[i].duration = phases[i].end - phases[i].start;
+    phases[i].start = dates[i]?.val || dates[0]?.val;
+    phases[i].end   = dates[i+1]?.val || dates[dates.length-1]?.val;
+    phases[i].dur   = phases[i].end - phases[i].start;
+    phases[i].dependsOn = i>0 ? phases[i-1].name : null;
   }
 
   return phases;
 }
 
-// ===== TIJDSBALK =====
-function renderTimeline(phases){
+// ===== CRITICAL PATH =====
+function criticalPath(phases){
+  return phases.map(p=>p.name);
+}
 
-  if(phases.length === 0) return "<p>Geen planning gevonden</p>";
+// ===== TIMELINE =====
+function timeline(phases){
 
-  let min = Math.min(...phases.map(p=>p.start));
-  let max = Math.max(...phases.map(p=>p.end));
-  let total = max - min;
+  let cp = criticalPath(phases);
+
+  let min=Math.min(...phases.map(p=>p.start));
+  let max=Math.max(...phases.map(p=>p.end));
+  let total=max-min;
 
   return phases.map(p=>{
-
-    let left = ((p.start - min)/total)*100;
-    let width = (p.duration/total)*100;
-
-    let critical = p.duration > 6 ? "critical" : "normal";
+    let left=((p.start-min)/total)*100;
+    let width=(p.dur/total)*100;
+    let isCritical = cp.includes(p.name);
 
     return `
-    <div style="margin-bottom:8px;">
-      <b>${p.name}</b>
-      <div style="background:#ddd;height:20px;border-radius:4px;">
-        <div class="${critical}" style="
+    <div style="margin-bottom:10px;">
+      <b>${p.name}</b><br>
+      <small>${p.dependsOn ? "Afhankelijk van: "+p.dependsOn : "Startfase"}</small>
+
+      <div style="background:#ddd;">
+        <div style="
           margin-left:${left}%;
           width:${width}%;
           height:20px;
-          border-radius:4px;">
-        </div>
+          background:${isCritical ? '#dc2626' : '#2563eb'};
+        "></div>
       </div>
     </div>
     `;
   }).join("");
 }
 
-// ===== MAIN =====
+// ===== ANALYSE =====
 function analyse(){
 
-  let t = lvText.value.toLowerCase();
+  try{
 
-  let planning = buildPlanning(t);
+    let t=lvText.value.toLowerCase();
+    if(!t) return out.innerHTML="Geen tekst";
 
-  document.getElementById("out").innerHTML = `
+    let planning=buildPlanning(t);
 
-  <div class="section">
-    <h3>Planning per fase</h3>
-    ${planning.map(p=>`
-      <div>
-        <b>${p.name}</b><br>
-        Start: ${p.start}<br>
-        Eind: ${p.end}<br>
-        Duur: ${p.duration} maanden
-      </div><br>
-    `).join("")}
-  </div>
+    let risico={
+      contract:[],
+      planning:[],
+      uitvoering:[],
+      financieel:[]
+    };
 
-  <div class="section">
-    <h3>Tijdsbalk</h3>
-    ${renderTimeline(planning)}
-  </div>
+    if(t.includes("nicht vergütet")){
+      risico.contract.push("Niet vergoede werkzaamheden");
+      risico.financieel.push("Kosten voor eigen rekening");
+    }
 
-  `;
+    if(t.includes("unterbrechung")){
+      risico.planning.push("Onderbreking werkzaamheden");
+      risico.financieel.push("Stilstand kosten");
+    }
+
+    if(t.includes("nicht parallel")){
+      risico.planning.push("Geen parallel uitvoering");
+    }
+
+    if(t.includes("drittfirmen")){
+      risico.uitvoering.push("Afhankelijkheid derden");
+    }
+
+    let totalRisico = Object.values(risico).flat().length;
+
+    let samenvatting = `
+Dit project bevat ${planning.length} fasen met een gefaseerde uitvoering.
+De planning is lineair afhankelijk, waardoor vertraging direct impact heeft op de einddatum.
+De grootste risico’s zitten in externe afhankelijkheden en contractuele uitsluitingen.
+Strakke coördinatie en fasering zijn cruciaal voor succesvolle uitvoering.
+    `;
+
+    out.innerHTML = `
+
+    <div class="grid">
+      <div class="card"><div>Fases</div><div class="big">${planning.length}</div></div>
+      <div class="card"><div>Risico’s</div><div class="big high">${totalRisico}</div></div>
+      <div class="card"><div>Kritisch</div><div class="big high">${planning.length}</div></div>
+      <div class="card"><div>Status</div><div class="big">Analyse gereed</div></div>
+    </div>
+
+    <div class="section">
+      <h3>Executive Samenvatting</h3>
+      <p>${samenvatting}</p>
+    </div>
+
+    <div class="section">
+      <h3>Planning & Kritieke pad</h3>
+      ${timeline(planning)}
+    </div>
+
+    <div class="section">
+      <h3>Risico Analyse</h3>
+
+      <b>Contract</b>
+      <ul>${risico.contract.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+
+      <b>Planning</b>
+      <ul>${risico.planning.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+
+      <b>Uitvoering</b>
+      <ul>${risico.uitvoering.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
+
+      <b>Financieel</b>
+      <ul>${risico.financieel.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+    </div>
+
+    `;
+
+  } catch(e){
+    out.innerHTML = "Fout: "+e.message;
+  }
+}
+
+// ===== PDF EXPORT =====
+async function exportPDF(){
+
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.text("LV Analyse Rapport",10,10);
+  doc.text(out.innerText,10,20);
+
+  doc.save("LV_analyse.pdf");
 }
 
 </script>
+
+</body>
+</html>
