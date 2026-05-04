@@ -2,14 +2,14 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Tool (AI Vertaling)</title>
+<title>LV Analyse Tool (DeepL)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
 textarea { width:100%; height:250px; font-family:monospace; }
-button { padding:8px 14px; margin:8px 0; }
+button { padding:6px 10px; margin:4px 4px 4px 0; cursor:pointer; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 .plan { background:#eef6ff; border-left:4px solid #2563eb; padding:10px; margin:10px 0; }
 .muted { color:#666; font-size:0.9em; }
@@ -20,11 +20,14 @@ button { padding:8px 14px; margin:8px 0; }
 
 <body>
 
-<h1>LV Analyse (AI vertaling)</h1>
+<h1>LV Analyse (DeepL vertaling)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
+<button onclick="vertaalDeepL(document.getElementById('lvText').value)">
+  Vertaal volledige tekst via DeepL
+</button>
 <textarea id="lvText"></textarea>
 </div>
 
@@ -67,35 +70,10 @@ const maandMap = {
   "oktober":9,"november":10,"dezember":11
 };
 
-// ================= AI VERTALING =================
-async function vertaalAI(t){
-
-  const apiKey = "JOUW_API_KEY_HIER";
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + apiKey
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "Vertaal Duitse bouwkundige tekst naar correct en vloeiend Nederlands. Maak er natuurlijke zinnen van."
-        },
-        {
-          role: "user",
-          content: t
-        }
-      ],
-      temperature: 0.2
-    })
-  });
-
-  const data = await res.json();
-  return data.choices[0].message.content.trim();
+// ================= DEEPL =================
+function vertaalDeepL(t){
+  const url = "https://www.deepl.com/translator#de/nl/" + encodeURIComponent(t);
+  window.open(url, "_blank");
 }
 
 // ================= SAMENVATTING =================
@@ -159,7 +137,7 @@ function berekenGaten(tijd){
 }
 
 // ================= ANALYSE =================
-async function analyse(){
+function analyse(){
 
   const text = document.getElementById("lvText").value;
   const out = document.getElementById("result");
@@ -224,7 +202,7 @@ async function analyse(){
   }
 
   // ================= OUTPUT =================
-  for(const [plan,d] of Object.entries(data)){
+  Object.entries(data).forEach(([plan,d],i)=>{
 
     d.tijd = mergeTijd(d.tijd);
     const gaps = berekenGaten(d.tijd);
@@ -233,12 +211,19 @@ async function analyse(){
     div.className="plan";
 
     div.innerHTML=`
-    <strong>${plan}</strong>
+    <strong>${i+1}. ${plan}</strong>
+
+    ${
+      d.start && d.end
+      ? `<p><b>Periode:</b> ${d.start.toLocaleDateString()} → ${d.end.toLocaleDateString()}</p>`
+      : `<p class="muted">Geen volledige periode</p>`
+    }
 
     <b>Fasen:</b>
     ${d.tijd.map((t,i)=>`
       <div class="fase">
-        Fase ${i+1}: ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
+        <b>Fase ${i+1}</b><br>
+        ${t.start.toLocaleDateString()} → ${t.end.toLocaleDateString()}
       </div>
     `).join("")}
 
@@ -254,28 +239,20 @@ async function analyse(){
     }
 
     <b>Werkzaamheden:</b>
-    <ul class="werk"></ul>
+    <ul>
+    ${d.sam.map(s=>`
+      <li>
+        ${s}<br>
+        <button onclick="vertaalDeepL(\`${s.replace(/`/g,"")}\`)">
+          Vertaal via DeepL
+        </button>
+      </li>
+    `).join("")}
+    </ul>
     `;
 
     out.appendChild(div);
-
-    // 🔥 Samenvatting direct + AI vertaling eronder
-    const lijst = div.querySelector(".werk");
-
-    for(const s of d.sam){
-
-      const li = document.createElement("li");
-      li.innerHTML = `${s}<br><span class="muted">→ vertalen...</span>`;
-      lijst.appendChild(li);
-
-      try{
-        const v = await vertaalAI(s);
-        li.innerHTML = `${s}<br><span class="muted">→ ${v}</span>`;
-      }catch(e){
-        li.innerHTML = `${s}<br><span class="muted">→ (vertaling mislukt)</span>`;
-      }
-    }
-  }
+  });
 
 }
 
