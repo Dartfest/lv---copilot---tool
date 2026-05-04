@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <title>LV – Planstraße fasering uit LV</title>
 
-<!-- ✅ pdf.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- ✅ PDF.JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/min.js</script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
-<!-- ✅ jsPDF -->
+<!-- ✅ JSPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
@@ -20,16 +20,9 @@ body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 textarea { width:100%; min-height:160px; font-family:monospace; }
 button { padding:6px 12px; margin-right:6px; }
 
-.plan { padding:14px; border-left:8px solid; border-radius:6px; margin-top:16px; }
-.pa{background:#f3e8ff;border-color:#9333ea;}
-.pb{background:#e0f2fe;border-color:#0284c7;}
-.pc{background:#dcfce7;border-color:#16a34a;}
-.pd{background:#ffedd5;border-color:#ea580c;}
-.px{background:#f3f4f6;border-color:#6b7280;}
-
+.plan { padding:14px; border-left:8px solid #16a34a; border-radius:6px; margin-top:16px; }
 .warn { color:#b91c1c; font-weight:bold; }
 ul { margin-left:18px; }
-h3 { margin-top:0; }
 </style>
 </head>
 
@@ -46,114 +39,76 @@ h3 { margin-top:0; }
 
 <div class="box">
   <h2>2. Analyse</h2>
-  <button onclick="analyse()">Analyseer Planstraßen</button>
+  <button onclick="analyse()">Analyseer</button>
   <button onclick="exportPDF()">📄 Uitvoerders‑PDF</button>
   <div id="output"></div>
 </div>
 
 <script>
-/* ================= PDF LEZEN ================= */
+/* === PDF LEZEN === */
 async function readPDF(file){
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-  let t="";
+  let t = "";
   for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const c=await page.getTextContent();
-    t+=c.items.map(i=>i.str).join(" ")+"\n";
+    const page = await pdf.getPage(p);
+    const c = await page.getTextContent();
+    t += c.items.map(i=>i.str).join(" ") + "\n";
   }
   return t;
 }
 
 async function readLV(){
   let t="";
-  for(const f of lvFiles.files){ t+=await readPDF(f); }
-  lvText.value=t;
+  for(const f of document.getElementById("lvFiles").files){
+    t += await readPDF(f);
+  }
+  document.getElementById("lvText").value = t;
 }
 
-/* ================= DATA ================= */
+/* === DATA === */
 let planData = {};
-
 const PLAN_REGEX = /Planstraße\s+([A-Z])/gi;
-const DATE_REGEX = /(von\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4})|(\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4}\s*(t\/m|bis|-)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4})|(KW\s*\d+\s*(–|-)\s*\d+)|((Januar|Februar|Maart|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|December)\s+\d{4})/gi;
+const DATE_REGEX = /(von\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|(\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(t\/m|bis|-)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|(KW\s*\d+\s*(–|-)\s*\d+)/gi;
 
-const BUIS_REGEX = /(PVC|PE[\s-]?HD|PE\s?100|BETON|STAAL)[^.\n]{0,50}(DN\s?\d+|Ø\s?\d+)?[^.\n]{0,20}(SDR\s?\d+|PN\s?\d+)?/i;
-const QTY_REGEX  = /(\d+[,\.]?\d*)\s?(m|lfm)/i;
-
-/* ================= ANALYSE ================= */
+/* === ANALYSE === */
 function analyse(){
   planData = {};
-  output.innerHTML="";
+  const out = document.getElementById("output");
+  out.innerHTML = "";
 
-  const text = lvText.value;
+  const text = document.getElementById("lvText").value;
   if(!text.trim()){ alert("LV leeg"); return; }
 
   let m;
   while((m = PLAN_REGEX.exec(text)) !== null){
     const key = `Planstraße ${m[1]}`;
-    if(!planData[key]){
-      planData[key] = {
-        perioden:new Set(),
-        materiaal:{},
-        risico:new Set()
-      };
-    }
+    if(!planData[key]) planData[key] = new Set();
 
-    const frag = text.substring(m.index, m.index+900);
+    const frag = text.substring(m.index, m.index+800);
     let d;
     while((d = DATE_REGEX.exec(frag)) !== null){
-      planData[key].perioden.add(d[0]);
-    }
-
-    if(/abweich|mehr/i.test(frag)) planData[key].risico.add("Meerwerk / afwijkingen mogelijk");
-
-    const qtyMatch = frag.match(QTY_REGEX);
-    const buisMatch = frag.match(BUIS_REGEX);
-
-    if(qtyMatch && buisMatch){
-      const meters=parseFloat(qtyMatch[1].replace(",","."));
-      const type=buisMatch[0].replace(/\s+/g," ").trim();
-      if(!planData[key].materiaal[type]) planData[key].materiaal[type]=0;
-      planData[key].materiaal[type]+=meters;
+      planData[key].add(d[0]);
     }
   }
 
-  render();
-}
-
-/* ================= RENDER ================= */
-function render(){
   Object.keys(planData).sort().forEach(k=>{
-    const d=planData[k];
-    const letter=k.slice(-1);
-    const cls=letter==="A"?"pa":letter==="B"?"pb":letter==="C"?"pc":letter==="D"?"pd":"px";
-    const types=Object.keys(d.materiaal);
-
-    const el=document.createElement("div");
-    el.className=`plan ${cls}`;
-    el.innerHTML=`
-<h3>${k}</h3>
-
-<strong>Periode volgens LV</strong>
-<ul>${d.periodes.size?[...d.periodes].map(p=>`<li>${p}</li>`).join(""):"<li>Geen tijdvak in LV vermeld</li>"}</ul>
-
-<strong>Materiaalstaat</strong>
-<ul>${types.length?types.map(t=>`<li>${d.materiaal[t].toFixed(1)} m – ${t}</li>`).join(""):"<li>Geen buismateriaal benoemd</li>"}</ul>
-
-${types.length>1?`<p class="warn">⚠ Meerdere buistypen in deze Planstraße</p>`:""}
-
-<strong>Risico’s</strong>
-<ul>${d.risico.size?[...d.risico].map(r=>`<li>${r}</li>`).join(""):"<li>Geen expliciete risico’s</li>"}</ul>
-`;
-    output.appendChild(el);
+    const el = document.createElement("div");
+    el.className = "plan";
+    el.innerHTML = `
+      <h3>${k}</h3>
+      <strong>Periode volgens LV</strong>
+      <ul>${planData[k].size ? [...planData[k]].map(p=>`<li>${p}</li>`).join("") : "<li>Geen tijdvak genoemd</li>"}</ul>
+    `;
+    out.appendChild(el);
   });
 }
 
-/* ================= PDF ================= */
+/* === PDF EXPORT === */
 function exportPDF(){
-  const {jsPDF}=window.jspdf;
-  const pdf=new jsPDF();
-  let y=10;
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+  let y = 10;
 
   pdf.setFontSize(12);
   pdf.text("Uitvoerderssamenvatting – fasering uit LV",10,y);
@@ -161,26 +116,18 @@ function exportPDF(){
   pdf.setFontSize(10);
 
   Object.keys(planData).sort().forEach(k=>{
-    const d=planData[k];
-    const types=Object.keys(d.materiaal);
-
-    const txt=`
+    const txt = `
 ${k}
-Periode (LV):
-- ${d.periodes.size?[...d.periodes].join("\n- "):"Geen tijdvak vermeld"}
-
-Materiaal:
-- ${types.length?types.map(t=>`${d.materiaal[t].toFixed(1)} m – ${t}`).join("\n- "):"Geen"}
-
-${types.length>1?"WAARSCHUWING: meerdere buistypen in deze straat":""}
+Periode:
+- ${planData[k].size ? [...planData[k]].join("\n- ") : "Geen tijdvak genoemd"}
 `;
-    const block=pdf.splitTextToSize(txt,180);
+    const block = pdf.splitTextToSize(txt,180);
     if(y+block.length*5>280){ pdf.addPage(); y=10; }
     pdf.text(block,10,y);
     y+=block.length*5+8;
   });
 
-  pdf.save("uitvoerderssamenvatting_planstrassen_fases_LV.pdf");
+  pdf.save("uitvoerders_fasering_planstrassen.pdf");
 }
 </script>
 
