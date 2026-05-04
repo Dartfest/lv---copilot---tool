@@ -2,68 +2,70 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV – Planstraße fasering (stabiel)</title>
+<title>LV – Planstraße (stabiel)</title>
 
-<!-- ✅ PDF.js – correcte script tag -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- ✅ PDF.js CORRECT -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdfpt>
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
 <style>
-body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
-.box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
+body {
+  font-family: Arial, sans-serif;
+  background:#f4f6f8;
+  padding:20px;
+}
 textarea {
   width:100%;
   min-height:260px;
   font-family:monospace;
   white-space:pre-wrap;
 }
-button { padding:6px 12px; margin-top:6px; margin-right:6px; }
-.marked {
-  background:#fff7ed;
-  border:1px solid #fdba74;
-  padding:10px;
-  font-family:monospace;
-  white-space:pre-wrap;
+button {
+  padding:6px 12px;
+  margin-top:6px;
+}
+.block {
+  background:#fff;
+  padding:16px;
+  border-radius:6px;
+  margin-bottom:16px;
 }
 .plan {
-  margin-top:12px;
-  padding:12px;
-  border-left:6px solid #2563eb;
+  margin-top:8px;
+  padding:8px;
+  border-left:4px solid #2563eb;
   background:#eff6ff;
 }
-.status-ok { color:green; font-weight:bold; }
+.ok {
+  color:green;
+  font-weight:bold;
+}
 </style>
 </head>
 
 <body>
 
-<h1>LV – Planstraße fasering (uit LV)</h1>
-<p class="status-ok">✅ pdf.js geladen</p>
+<h1>LV – Planstraße overzicht</h1>
+<p class="ok">✅ pdf.js is geladen</p>
 
-<div class="box">
+<div class="block">
   <h2>1. LV lezen</h2>
   <input type="file" id="file" accept=".pdf"><br>
   <button onclick="leesLV()">Lees LV</button>
   <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
 
-<div class="box">
-  <h2>2. Planstraßen markeren</h2>
-  <button onclick="markeer()">Markeer Planstraßen</button>
-  <div id="markedOutput" class="marked"></div>
-</div>
-
-<div class="box">
-  <h2>3. Samenvatting per Planstraße</h2>
-  <button onclick="analyse()">Analyseer</button>
-  <div id="summary"></div>
+<div class="block">
+  <h2>2. Gevonden Planstraßen</h2>
+  <button onclick="analyse()">Toon Planstraßen</button>
+  <div id="output"></div>
 </div>
 
 <script>
-/* ===== LV LEZEN ===== */
+/* ===== LV LEZEN – GEEN FILTERS ===== */
 async function leesLV() {
   const f = document.getElementById("file").files[0];
   if (!f) { alert("Kies eerst een PDF"); return; }
@@ -72,56 +74,43 @@ async function leesLV() {
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
 
   let text = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const c = await page.getTextContent();
-    const lijnen = c.items.map(it => it.str).filter(t => t.trim());
-    text += c.items.map(it => it.str || " ").join("\n") + "\n\n";
-  }
-  lvText.value = text;
-}
-
-/* ===== MARKEREN ===== */
-function markeer() {
-  markedOutput.textContent =
-    lvText.value.replace(/(Planstraße\s+[A-Z])/g, "➡️ $1 ⬅️");
-}
-
-/* ===== ANALYSE PLANSTRASSE + FASE ===== */
-function analyse() {
-  summary.innerHTML = "";
-
-  const planRegex = /Planstraße\s+([A-Z])/gi;
-  const dateRegex =
-    /(von\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(t\/m|bis|-)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
-     (KW\s*\d+\s*(–|-)\s*\d+)/gi;
-
-  const data = {};
-  let m;
-
-  while ((m = planRegex.exec(lvText.value)) !== null) {
-    const key = "Planstraße " + m[1];
-    if (!data[key]) data[key] = new Set();
-
-    const frag = lvText.value.substring(m.index, m.index + 1000);
-    let d;
-    while ((d = dateRegex.exec(frag)) !== null) {
-      data[key].add(d[0]);
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    for (const item of content.items) {
+      text += item.str + "\n";
     }
+    text += "\n";
   }
 
-  Object.keys(data).sort().forEach(k => {
+  document.getElementById("lvText").value = text;
+}
+
+/* ===== PLANSTRASSE ZOEKEN ===== */
+function analyse() {
+  const text = document.getElementById("lvText").value;
+  const out = document.getElementById("output");
+  out.innerHTML = "";
+
+  if (!text.trim()) {
+    alert("Geen LV‑tekst gevonden");
+    return;
+  }
+
+  const regex = /Planstraße\s+[A-Z]/gi;
+  const found = new Set(text.match(regex) || []);
+
+  if (!found.size) {
+    out.innerHTML = "<p>Geen Planstraßen gevonden in LV.</p>";
+    return;
+  }
+
+  for (const p of found) {
     const div = document.createElement("div");
     div.className = "plan";
-    div.innerHTML =
-      "<strong>" + k + "</strong><ul>" +
-      (data[k].size
-        ? [...data[k]].map(p => "<li>"+p+"</li>").join("")
-        : "<li>Geen faseperiode in LV vermeld</li>") +
-      "</ul>";
-    summary.appendChild(div);
-  });
+    div.textContent = p;
+    out.appendChild(div);
+  }
 }
 </script>
 
