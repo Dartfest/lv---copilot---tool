@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse PRO+</title>
+<title>LV Analyse Engine PRO</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -12,14 +12,14 @@ body { font-family: Arial; padding:20px; background:#f4f6f8; }
 textarea { width:100%; height:200px; font-family:monospace; }
 button { padding:8px 14px; margin:6px; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
-.report { background:#eef6ff; border-left:5px solid #2563eb; padding:15px; }
+.section { background:#fff; border-left:5px solid #2563eb; padding:15px; margin:10px 0; }
 .risk { color:#b91c1c; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse PRO+</h1>
+<h1>LV Analyse Engine (PRO)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -33,7 +33,7 @@ button { padding:8px 14px; margin:6px; }
 
 <script>
 
-// ===== PDF LEZEN =====
+// ================= PDF =================
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -51,84 +51,130 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== ANALYSE ENGINE =====
+// ================= ENGINE =================
 let analyseData = {};
 
 function analyse(){
 
-  const text = document.getElementById("lvText").value.toLowerCase();
+  const raw = document.getElementById("lvText").value;
+  const text = raw.toLowerCase();
+
   const out = document.getElementById("result");
   out.innerHTML="";
 
-  // ===== DETECTIES =====
-  const afhankelijk = text.match(/drittfirmen|versorgung|koord|abstimmung/gi);
-  const geenParallel = text.match(/nicht parallel/gi);
-  const onderbreking = text.match(/unterbrechung/gi);
-  const strakkePlanning = text.match(/ohne unterbrechung|zeitvorgaben/gi);
+  // ===== WERKZAAMHEDEN =====
+  let werk = [];
+  if(text.includes("kanal")) werk.push("Aanleg riolering");
+  if(text.includes("kabel") || text.includes("leitung")) werk.push("Kabels en leidingen");
+  if(text.includes("straße")) werk.push("Aanleg infrastructuur / bouwwegen");
+  if(text.includes("versorgung")) werk.push("Nutsvoorzieningen");
 
-  // ===== SAMENVATTING =====
-  let samenvatting = `
-  Dit project betreft civieltechnische werkzaamheden waaronder riolering, kabels en leidingen en de aanleg van bouwwegen. 
-  De uitvoering is gefaseerd en kent duidelijke afhankelijkheden tussen werkzaamheden en betrokken partijen.
-  `;
+  // ===== PLANNING =====
+  let planning = [];
+  const maanden = text.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+\d{4}/gi);
+  if(maanden) planning = maanden;
 
-  if(strakkePlanning){
-    samenvatting += `
-    De planning is strak opgezet waarbij werkzaamheden zonder onderbreking moeten worden uitgevoerd.`;
+  // ===== FASES =====
+  let fases = [];
+  const faseRegex = /(\d+)\.\s*bauabschnitt.*?planstraße\s+([a-z])/gi;
+  let m;
+  while((m=faseRegex.exec(text))){
+    fases.push(`Fase ${m[1]} - Planstraße ${m[2].toUpperCase()}`);
   }
 
-  if(afhankelijk){
-    samenvatting += `
-    Er is sprake van afhankelijkheid van derden zoals nutsbedrijven, wat invloed heeft op de voortgang.`;
-  }
+  // ===== BEPERKINGEN =====
+  let beperkingen = [];
+  if(text.includes("nicht parallel")) beperkingen.push("Geen parallel werk toegestaan");
+  if(text.includes("ohne unterbrechung")) beperkingen.push("Werkzaamheden zonder onderbreking uitvoeren");
+  if(text.includes("zeitvorgaben")) beperkingen.push("Strikte tijdseisen");
 
-  if(geenParallel){
-    samenvatting += `
-    Parallel werken tussen fases is niet toegestaan, waardoor de doorlooptijd kritisch wordt.`;
-  }
-
-  if(onderbreking){
-    samenvatting += `
-    Mogelijke onderbrekingen tussen fases moeten worden ingecalculeerd en worden niet extra vergoed.`;
-  }
+  // ===== AFHANKELIJKHEDEN =====
+  let afhankelijk = [];
+  if(text.includes("drittfirmen") || text.includes("versorgung"))
+    afhankelijk.push("Afhankelijk van derden (nutsbedrijven)");
 
   // ===== RISICO =====
   let risico = [];
 
-  if(strakkePlanning)
-    risico.push("Strakke planning zonder uitloopmogelijkheden");
+  if(beperkingen.length)
+    risico.push("Beperkingen in uitvoering verhogen planningsdruk");
 
-  if(afhankelijk)
-    risico.push("Afhankelijkheid van derden (nutsbedrijven)");
+  if(afhankelijk.length)
+    risico.push("Afhankelijkheden van derden kunnen vertraging veroorzaken");
 
-  if(geenParallel)
-    risico.push("Geen parallel werk mogelijk - verhoogde doorlooptijd");
+  if(text.includes("unterbrechung"))
+    risico.push("Onderbrekingen leiden tot inefficiëntie en kosten");
 
-  if(onderbreking)
-    risico.push("Onderbrekingen leiden tot extra kosten en inefficiëntie");
+  if(fases.length && text.includes("nicht parallel"))
+    risico.push("Fasering zonder overlap verlengt doorlooptijd");
 
   if(risico.length === 0)
-    risico.push("Algemeen uitvoeringsrisico - afstemming en planning essentieel");
+    risico.push("Algemene uitvoeringsrisico's aanwezig");
 
-  analyseData = { samenvatting, risico };
+  // ===== SAMENVATTING (ECHTE TEKST) =====
+  let samenvatting = `
+  Het project omvat ${werk.join(", ")}.
+  `;
+
+  if(fases.length){
+    samenvatting += `De uitvoering is opgedeeld in ${fases.length} fases (${fases.join(", ")}). `;
+  }
+
+  if(planning.length){
+    samenvatting += `De planning loopt over de periode ${planning.join(", ")}. `;
+  }
+
+  if(afhankelijk.length){
+    samenvatting += `De uitvoering is afhankelijk van derden. `;
+  }
+
+  if(beperkingen.length){
+    samenvatting += `Er gelden belangrijke beperkingen zoals ${beperkingen.join(", ")}. `;
+  }
+
+  samenvatting += `Dit vraagt om een strakke planning en intensieve coördinatie.`;
+
+  analyseData = {
+    werk, planning, fases, beperkingen, afhankelijk, risico, samenvatting
+  };
 
   // ===== OUTPUT =====
   out.innerHTML = `
-  <div class="report">
 
-  <h3>Samenvatting LV</h3>
-  <p>${samenvatting}</p>
-
-  <h3>Belangrijkste risico's</h3>
-  <ul class="risk">
-  ${risico.map(r=>`<li>${r}</li>`).join("")}
-  </ul>
-
+  <div class="section">
+    <h3>Samenvatting</h3>
+    <p>${samenvatting}</p>
   </div>
+
+  <div class="section">
+    <h3>Werkzaamheden</h3>
+    <ul>${werk.map(w=>`<li>${w}</li>`).join("")}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Fasering</h3>
+    <ul>${fases.length ? fases.map(f=>`<li>${f}</li>`).join("") : "<li>Niet expliciet benoemd</li>"}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Planning</h3>
+    <ul>${planning.length ? planning.map(p=>`<li>${p}</li>`).join("") : "<li>Niet duidelijk gespecificeerd</li>"}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Beperkingen</h3>
+    <ul>${beperkingen.length ? beperkingen.map(b=>`<li>${b}</li>`).join("") : "<li>Geen specifieke beperkingen gevonden</li>"}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Risico's</h3>
+    <ul class="risk">${risico.map(r=>`<li>${r}</li>`).join("")}</ul>
+  </div>
+
   `;
 }
 
-// ===== PDF =====
+// ================= PDF =================
 function exportPDF(){
 
   if(!analyseData.samenvatting){
@@ -149,17 +195,14 @@ function exportPDF(){
   doc.text("Samenvatting",10,y);
   y+=6;
 
-  doc.setFontSize(10);
   const sam = doc.splitTextToSize(analyseData.samenvatting,180);
   doc.text(sam,10,y);
   y += sam.length*5 + 5;
 
   doc.setTextColor(200,0,0);
-  doc.setFontSize(12);
   doc.text("Risico's",10,y);
   y+=6;
 
-  doc.setFontSize(10);
   analyseData.risico.forEach(r=>{
     doc.text("- "+r,10,y);
     y+=5;
