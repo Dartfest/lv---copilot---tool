@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV AI Tender Engine</title>
+<title>LV Tender Engine PRO</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -18,7 +18,9 @@ button { padding:8px 12px; margin:6px; }
 .critical { background:#b91c1c; }
 .normal { background:#2563eb; }
 
-.risk { color:#b91c1c; font-weight:bold; }
+.risk-high { color:#b91c1c; font-weight:bold; }
+.risk-mid { color:#f59e0b; font-weight:bold; }
+.risk-low { color:#15803d; font-weight:bold; }
 
 .row { margin:10px 0; }
 </style>
@@ -26,15 +28,12 @@ button { padding:8px 12px; margin:6px; }
 
 <body>
 
-<h1>LV AI Tender Engine (Hybride)</h1>
+<h1>LV Tender Engine PRO</h1>
 
 <input type="file" id="file">
 <button onclick="leesLV()">Lees PDF</button>
 <button onclick="analyse()">Analyse</button>
 <button onclick="exportPDF()">Export PDF</button>
-
-<br>
-<label><input type="checkbox" id="useAI"> Gebruik AI (optioneel)</label>
 
 <textarea id="lvText"></textarea>
 
@@ -60,7 +59,7 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== ACTIVITEITEN =====
+// ===== FASES =====
 function extractFases(text){
   let fases=[];
   let regex = /(\d+)\.\s*bauabschnitt/gi;
@@ -76,7 +75,7 @@ function extractFases(text){
   return fases;
 }
 
-// ===== DEPENDENCY PARSER =====
+// ===== DEPENDENCIES =====
 function parseDependencies(text, fases){
 
   if(text.includes("nicht parallel")){
@@ -89,14 +88,6 @@ function parseDependencies(text, fases){
     for(let i=1;i<fases.length;i++){
       fases[i].predecessors.push(i-1);
     }
-  }
-
-  if(text.includes("teil 1") && text.includes("teil 2")){
-    fases.forEach((f,i)=>{
-      if(f.naam.includes("1") && fases[i+1]){
-        fases[i+1].predecessors.push(i);
-      }
-    });
   }
 
   return fases;
@@ -161,32 +152,63 @@ function runCPM(fases, dates){
   return { fases, total };
 }
 
-// ===== RISICO =====
-function detectRisico(text){
+// ===== CONTRACT ANALYSE =====
+function contractAnalyse(text){
 
-  let r=[];
-  if(text.includes("nicht parallel"))
-    r.push("Geen parallel werken mogelijk");
+  let analyse = [];
 
   if(text.includes("nicht vergütet"))
-    r.push("Kosten niet vergoed");
+    analyse.push("Kosten die hier genoemd zijn worden niet apart vergoed.");
+
+  if(text.includes("ohne unterbrechung"))
+    analyse.push("Werkzaamheden moeten zonder onderbreking worden uitgevoerd.");
 
   if(text.includes("drittfirmen"))
-    r.push("Afhankelijkheid derden");
+    analyse.push("Werk is afhankelijk van derden (nutsbedrijven etc.).");
 
-  return r;
+  if(text.includes("nicht parallel"))
+    analyse.push("Parallel werken is contractueel uitgesloten.");
+
+  return analyse;
 }
 
-// ===== AI HOOK =====
-async function aiAnalyse(text){
-  // later API hier
-  return null;
+// ===== RISICO SCORE =====
+function risicoScore(text){
+
+  let score=0;
+
+  if(text.includes("nicht vergütet")) score+=2;
+  if(text.includes("drittfirmen")) score+=2;
+  if(text.includes("nicht parallel")) score+=2;
+  if(text.includes("ohne unterbrechung")) score+=1;
+
+  if(score>=5) return ["Hoog","risk-high"];
+  if(score>=3) return ["Middel","risk-mid"];
+  return ["Laag","risk-low"];
+}
+
+// ===== ACTIES =====
+function acties(text){
+
+  let a=[];
+
+  if(text.includes("drittfirmen"))
+    a.push("Stem planning af met nutsbedrijven.");
+
+  if(text.includes("nicht parallel"))
+    a.push("Plan werkzaamheden strikt sequentieel.");
+
+  if(text.includes("ohne unterbrechung"))
+    a.push("Zorg voor continue inzet van personeel en materieel.");
+
+  if(text.includes("nicht vergütet"))
+    a.push("Controleer kostenposten en neem risico op in begroting.");
+
+  return a;
 }
 
 // ===== MAIN =====
-let analyseData={};
-
-async function analyse(){
+function analyse(){
 
   const text = document.getElementById("lvText").value.toLowerCase();
 
@@ -196,20 +218,21 @@ async function analyse(){
   const dates = parseDates(text);
   const { fases:res, total } = runCPM(fases, dates);
 
-  const risico = detectRisico(text);
+  const contract = contractAnalyse(text);
+  const risico = risicoScore(text);
+  const actie = acties(text);
 
-  let html="";
+  let gantt="";
 
   res.forEach(f=>{
     const width = (f.duur/total)*100;
     const left = (f.ES/total)*100;
 
-    html+=`
+    gantt+=`
     <div class="row">
       ${f.naam}
       <div class="bar ${f.slack===0?'critical':'normal'}"
            style="width:${width}%; margin-left:${left}%"></div>
-      <div>Slack: ${f.slack.toFixed(0)}</div>
     </div>`;
   });
 
@@ -217,15 +240,23 @@ async function analyse(){
 
   <div class="section">
     <h3>Planning (CPM)</h3>
-    ${html}
-    <p><b>Kritieke pad:</b> rood</p>
+    ${gantt}
+    <p>Kritieke pad = rood</p>
   </div>
 
   <div class="section">
-    <h3>Risico's</h3>
-    <ul class="risk">
-    ${risico.map(r=>`<li>${r}</li>`).join("")}
-    </ul>
+    <h3>Contractanalyse</h3>
+    <ul>${contract.map(c=>`<li>${c}</li>`).join("")}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Risico niveau</h3>
+    <p class="${risico[1]}">${risico[0]}</p>
+  </div>
+
+  <div class="section">
+    <h3>Actiepunten uitvoerder</h3>
+    <ul>${actie.map(a=>`<li>${a}</li>`).join("")}</ul>
   </div>
   `;
 }
@@ -237,7 +268,6 @@ function exportPDF(){
   const doc = new jsPDF();
 
   doc.text("LV Analyse",10,10);
-
   doc.save("analyse.pdf");
 }
 
