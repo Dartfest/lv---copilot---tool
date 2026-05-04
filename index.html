@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV – Planstraße uitvoering & planning</title>
+<title>LV – Planstraße fasering uit LV</title>
 
 <!-- ✅ pdf.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -17,9 +17,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 <style>
 body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
-textarea { width:100%; min-height:150px; font-family:monospace; }
+textarea { width:100%; min-height:160px; font-family:monospace; }
 button { padding:6px 12px; margin-right:6px; }
-input[type="date"] { padding:4px; }
 
 .plan { padding:14px; border-left:8px solid; border-radius:6px; margin-top:16px; }
 .pa{background:#f3e8ff;border-color:#9333ea;}
@@ -36,65 +35,55 @@ h3 { margin-top:0; }
 
 <body>
 
-<h1>LV – Planstraße uitvoering & planning</h1>
+<h1>LV – Planstraße fasering (uit LV)</h1>
 
 <div class="box">
-  <h2>1. Startinstellingen</h2>
-  <label>
-    Startdatum uitvoering:
-    <input type="date" id="startDate">
-  </label>
-</div>
-
-<div class="box">
-  <h2>2. LV‑PDF(s)</h2>
+  <h2>1. LV‑PDF(s)</h2>
   <input type="file" id="lvFiles" multiple accept=".pdf"><br><br>
   <button onclick="readLV()">Lees LV</button>
-  <textarea id="lvText"></textarea>
+  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
 
 <div class="box">
-  <h2>3. Analyse & planning</h2>
-  <button onclick="analyse()">Analyseer</button>
+  <h2>2. Analyse</h2>
+  <button onclick="analyse()">Analyseer Planstraßen</button>
   <button onclick="exportPDF()">📄 Uitvoerders‑PDF</button>
   <div id="output"></div>
 </div>
 
 <script>
-/* ================= INSTELBAAR ================= */
-const PRODUCTIE_M_PER_DAG = 40;
-
-/* ================= PDF INLEZEN ================= */
+/* ================= PDF LEZEN ================= */
 async function readPDF(file){
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({data:buf}).promise;
   let t="";
   for(let p=1;p<=pdf.numPages;p++){
-    const page = await pdf.getPage(p);
-    const c = await page.getTextContent();
-    t += c.items.map(i=>i.str).join(" ") + "\n";
+    const page=await pdf.getPage(p);
+    const c=await page.getTextContent();
+    t+=c.items.map(i=>i.str).join(" ")+"\n";
   }
   return t;
 }
 
 async function readLV(){
   let t="";
-  for(const f of lvFiles.files){
-    t += await readPDF(f);
-  }
-  lvText.value = t;
+  for(const f of lvFiles.files){ t+=await readPDF(f); }
+  lvText.value=t;
 }
 
 /* ================= DATA ================= */
 let planData = {};
+
 const PLAN_REGEX = /Planstraße\s+([A-Z])/gi;
+const DATE_REGEX = /(von\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4})|(\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4}\s*(t\/m|bis|-)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{2,4})|(KW\s*\d+\s*(–|-)\s*\d+)|((Januar|Februar|Maart|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|December)\s+\d{4})/gi;
+
 const BUIS_REGEX = /(PVC|PE[\s-]?HD|PE\s?100|BETON|STAAL)[^.\n]{0,50}(DN\s?\d+|Ø\s?\d+)?[^.\n]{0,20}(SDR\s?\d+|PN\s?\d+)?/i;
 const QTY_REGEX  = /(\d+[,\.]?\d*)\s?(m|lfm)/i;
 
 /* ================= ANALYSE ================= */
 function analyse(){
   planData = {};
-  output.innerHTML = "";
+  output.innerHTML="";
 
   const text = lvText.value;
   if(!text.trim()){ alert("LV leeg"); return; }
@@ -104,23 +93,26 @@ function analyse(){
     const key = `Planstraße ${m[1]}`;
     if(!planData[key]){
       planData[key] = {
+        perioden:new Set(),
         materiaal:{},
         risico:new Set()
       };
     }
 
-    const frag = text.substring(m.index, m.index+800).toLowerCase();
-
-    if(frag.includes("abweich") || frag.includes("mehr")){
-      planData[key].risico.add("Meerwerk / afwijkingen mogelijk");
+    const frag = text.substring(m.index, m.index+900);
+    let d;
+    while((d = DATE_REGEX.exec(frag)) !== null){
+      planData[key].perioden.add(d[0]);
     }
+
+    if(/abweich|mehr/i.test(frag)) planData[key].risico.add("Meerwerk / afwijkingen mogelijk");
 
     const qtyMatch = frag.match(QTY_REGEX);
     const buisMatch = frag.match(BUIS_REGEX);
 
     if(qtyMatch && buisMatch){
-      const meters = parseFloat(qtyMatch[1].replace(",","."));
-      const type = buisMatch[0].replace(/\s+/g," ").trim();
+      const meters=parseFloat(qtyMatch[1].replace(",","."));
+      const type=buisMatch[0].replace(/\s+/g," ").trim();
       if(!planData[key].materiaal[type]) planData[key].materiaal[type]=0;
       planData[key].materiaal[type]+=meters;
     }
@@ -129,51 +121,24 @@ function analyse(){
   render();
 }
 
-/* ================= RENDER MET DATUMLIJN ================= */
+/* ================= RENDER ================= */
 function render(){
-  const startInput = document.getElementById("startDate").value;
-  if(!startInput){ alert("Kies eerst een startdatum"); return; }
-
-  let currentDate = new Date(startInput);
-
   Object.keys(planData).sort().forEach(k=>{
-    const d = planData[k];
-    const types = Object.keys(d.materiaal);
-    const totaalM = types.reduce((s,t)=>s+d.materiaal[t],0);
-    const dagen = Math.max(1, Math.ceil(totaalM / PRODUCTIE_M_PER_DAG));
+    const d=planData[k];
+    const letter=k.slice(-1);
+    const cls=letter==="A"?"pa":letter==="B"?"pb":letter==="C"?"pc":letter==="D"?"pd":"px";
+    const types=Object.keys(d.materiaal);
 
-    const start = new Date(currentDate);
-    const einde = new Date(currentDate);
-    einde.setDate(einde.getDate() + dagen - 1);
-    currentDate.setDate(currentDate.getDate() + dagen);
-
-    const label = dateStr(start) + " t/m " + dateStr(einde);
-
-    const letter = k.slice(-1);
-    const cls =
-      letter==="A"?"pa":
-      letter==="B"?"pb":
-      letter==="C"?"pc":
-      letter==="D"?"pd":"px";
-
-    const el = document.createElement("div");
-    el.className = `plan ${cls}`;
-    el.innerHTML = `
+    const el=document.createElement("div");
+    el.className=`plan ${cls}`;
+    el.innerHTML=`
 <h3>${k}</h3>
 
-<strong>Uitvoering</strong>
-<ul>
-  <li>Periode: <strong>${label}</strong></li>
-  <li>Duur: ${dagen} dag(en)</li>
-  <li>Totale lengte: ${totaalM.toFixed(1)} m</li>
-</ul>
+<strong>Periode volgens LV</strong>
+<ul>${d.periodes.size?[...d.periodes].map(p=>`<li>${p}</li>`).join(""):"<li>Geen tijdvak in LV vermeld</li>"}</ul>
 
 <strong>Materiaalstaat</strong>
-<ul>
-${types.length
-  ? types.map(t=>`<li>${d.materiaal[t].toFixed(1)} m – ${t}</li>`).join("")
-  : "<li>Geen buismateriaal benoemd</li>"}
-</ul>
+<ul>${types.length?types.map(t=>`<li>${d.materiaal[t].toFixed(1)} m – ${t}</li>`).join(""):"<li>Geen buismateriaal benoemd</li>"}</ul>
 
 ${types.length>1?`<p class="warn">⚠ Meerdere buistypen in deze Planstraße</p>`:""}
 
@@ -186,56 +151,38 @@ ${types.length>1?`<p class="warn">⚠ Meerdere buistypen in deze Planstraße</p>
 
 /* ================= PDF ================= */
 function exportPDF(){
-  const startInput = document.getElementById("startDate").value;
-  if(!startInput){ alert("Kies eerst een startdatum"); return; }
-
-  const {jsPDF} = window.jspdf;
-  const pdf = new jsPDF();
-  let y = 10;
-  let currentDate = new Date(startInput);
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF();
+  let y=10;
 
   pdf.setFontSize(12);
-  pdf.text("Uitvoerdersplanning per Planstraße",10,y);
+  pdf.text("Uitvoerderssamenvatting – fasering uit LV",10,y);
   y+=10;
   pdf.setFontSize(10);
 
   Object.keys(planData).sort().forEach(k=>{
-    const d = planData[k];
-    const types = Object.keys(d.materiaal);
-    const totaalM = types.reduce((s,t)=>s+d.materiaal[t],0);
-    const dagen = Math.max(1, Math.ceil(totaalM / PRODUCTIE_M_PER_DAG));
+    const d=planData[k];
+    const types=Object.keys(d.materiaal);
 
-    const start = new Date(currentDate);
-    const einde = new Date(currentDate);
-    einde.setDate(einde.getDate() + dagen - 1);
-    currentDate.setDate(currentDate.getDate() + dagen);
-
-    const txt = `
+    const txt=`
 ${k}
-Uitvoering: ${dateStr(start)} t/m ${dateStr(einde)}
-Duur: ${dagen} dag(en)
-Totale lengte: ${totaalM.toFixed(1)} m
+Periode (LV):
+- ${d.periodes.size?[...d.periodes].join("\n- "):"Geen tijdvak vermeld"}
 
 Materiaal:
 - ${types.length?types.map(t=>`${d.materiaal[t].toFixed(1)} m – ${t}`).join("\n- "):"Geen"}
 
 ${types.length>1?"WAARSCHUWING: meerdere buistypen in deze straat":""}
 `;
-    const block = pdf.splitTextToSize(txt,180);
+    const block=pdf.splitTextToSize(txt,180);
     if(y+block.length*5>280){ pdf.addPage(); y=10; }
     pdf.text(block,10,y);
     y+=block.length*5+8;
   });
 
-  pdf.save("uitvoerdersplanning_planstrassen.pdf");
-}
-
-/* ================= HELPERS ================= */
-function dateStr(d){
-  return d.toLocaleDateString("nl-NL", { day:"2-digit", month:"2-digit", year:"numeric" });
+  pdf.save("uitvoerderssamenvatting_planstrassen_fases_LV.pdf");
 }
 </script>
 
 </body>
 </html>
-``
