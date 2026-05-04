@@ -2,21 +2,19 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV – Planstraße fasen (leesbaar + export)</title>
+<title>LV – Planstraße fasering (werkt)</title>
 
-<!-- ✅ pdf.js (bewezen werkend) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
+<!-- ✅ PDF.JS CORRECT -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min<script>
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
-<!-- ✅ jsPDF (ALLEEN voor export) -->
+<!-- ✅ JSPDF CORRECT -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
-h1 { margin-top:0; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:16px; }
 textarea {
   width:100%;
@@ -25,37 +23,34 @@ textarea {
   white-space:pre-wrap;
 }
 button { padding:6px 12px; margin-top:6px; margin-right:6px; }
-
-.marked {
-  background:#fff7ed;
-  border:1px solid #fdba74;
-  padding:8px;
-  margin-top:8px;
-  font-family:monospace;
-  white-space:pre-wrap;
-}
-
 .plan {
   margin-top:12px;
   padding:12px;
   border-left:6px solid #2563eb;
   background:#eff6ff;
 }
-
+.marked {
+  background:#fff7ed;
+  border:1px solid #fdba74;
+  padding:10px;
+  white-space:pre-wrap;
+  font-family:monospace;
+}
 .status-ok { color:green; font-weight:bold; }
+.status-err { color:red; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h1>LV – Planstraße fasering (uit LV)</h1>
-<p class="status-ok">✅ pdf.js geladen – basis is stabiel</p>
+<h1>LV – Planstraße fasering</h1>
+<p id="libStatus"></p>
 
 <div class="box">
   <h2>1. LV lezen</h2>
   <input type="file" id="file" accept=".pdf"><br>
   <button onclick="leesLV()">Lees LV</button>
-  <textarea id="lvText" placeholder="LV‑tekst (leesbaar)"></textarea>
+  <textarea id="lvText" placeholder="LV-tekst verschijnt hier..."></textarea>
 </div>
 
 <div class="box">
@@ -72,9 +67,21 @@ button { padding:6px 12px; margin-top:6px; margin-right:6px; }
 </div>
 
 <script>
-/* ========== LV LEZEN ========== */
+/* ===== LIB CHECK ===== */
+window.onload = () => {
+  const s = document.getElementById("libStatus");
+  if (window.pdfjsLib) {
+    s.textContent = "✅ pdf.js correct geladen";
+    s.className = "status-ok";
+  } else {
+    s.textContent = "❌ pdf.js NIET geladen";
+    s.className = "status-err";
+  }
+};
+
+/* ===== LV LEZEN ===== */
 async function leesLV() {
-  const f = document.getElementById("file").files[0];
+  const f = file.files[0];
   if (!f) { alert("Kies eerst een PDF"); return; }
 
   const buf = await f.arrayBuffer();
@@ -84,38 +91,24 @@ async function leesLV() {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const c = await page.getTextContent();
-
-    const lines = c.items
-      .map(it => it.str)
-      .filter(t => t.trim().length);
-
+    const lines = c.items.map(it => it.str).filter(t => t.trim());
     text += lines.join("\n") + "\n\n";
   }
-  document.getElementById("lvText").value = text;
+  lvText.value = text;
 }
 
-/* ========== PLANSTRASSE MARKEREN ========== */
+/* ===== MARKEREN ===== */
 function markeer() {
-  const text = document.getElementById("lvText").value;
-  if (!text.trim()) { alert("Lees eerst het LV"); return; }
-
-  const marked = text.replace(
-    /(Planstraße\s+[A-Z])/g,
-    "➡️ $1 ⬅️"
-  );
-  document.getElementById("markedOutput").textContent = marked;
+  markedOutput.textContent =
+    lvText.value.replace(/(Planstraße\s+[A-Z])/g, "➡️ $1 ⬅️");
 }
 
-/* ========== ANALYSE PLANSTRASSE + FASE ========== */
+/* ===== ANALYSE ===== */
 let summaryData = {};
 
 function analyse() {
-  const text = document.getElementById("lvText").value;
-  const out = document.getElementById("summary");
-  out.innerHTML = "";
+  summary.innerHTML = "";
   summaryData = {};
-
-  if (!text.trim()) { alert("Lees eerst het LV"); return; }
 
   const planRegex = /Planstraße\s+([A-Z])/gi;
   const dateRegex =
@@ -124,59 +117,43 @@ function analyse() {
      (KW\s*\d+\s*(–|-)\s*\d+)/gi;
 
   let m;
-  while ((m = planRegex.exec(text)) !== null) {
-    const key = `Planstraße ${m[1]}`;
+  while ((m = planRegex.exec(lvText.value)) !== null) {
+    const key = "Planstraße " + m[1];
     if (!summaryData[key]) summaryData[key] = new Set();
 
-    const fragment = text.substring(m.index, m.index + 1000);
+    const frag = lvText.value.substring(m.index, m.index + 1000);
     let d;
-    while ((d = dateRegex.exec(fragment)) !== null) {
-      summaryData[key].add(d[0]);
-    }
+    while ((d = dateRegex.exec(frag)) !== null) summaryData[key].add(d[0]);
   }
 
   Object.keys(summaryData).sort().forEach(k => {
     const div = document.createElement("div");
     div.className = "plan";
-    div.innerHTML = `
-      <strong>${k}</strong>
-      <ul>
-        ${
-          summaryData[k].size
-          ? [...summaryData[k]].map(p => `<li>${p}</li>`).join("")
-          : "<li>Geen faseperiode in LV vermeld</li>"
-        }
-      </ul>
-    `;
-    out.appendChild(div);
+    div.innerHTML = "<strong>" + k + "</strong><ul>" +
+      (summaryData[k].size
+        ? [...summaryData[k]].map(p => "<li>"+p+"</li>").join("")
+        : "<li>Geen periode vermeld</li>") +
+      "</ul>";
+    summary.appendChild(div);
   });
 }
 
-/* ========== PDF EXPORT ========== */
+/* ===== EXPORT ===== */
 function exportPDF() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
   let y = 10;
 
-  pdf.setFontSize(12);
-  pdf.text("Samenvatting Planstraßen – fasering uit LV", 10, y);
+  pdf.text("Planstraße fasering (uit LV)", 10, y);
   y += 10;
-  pdf.setFontSize(10);
 
   Object.keys(summaryData).sort().forEach(k => {
-    const blok = `
-${k}
-- ${summaryData[k].size
-    ? [...summaryData[k]].join("\n- ")
-    : "Geen faseperiode in LV vermeld"}
-`;
-    const lines = pdf.splitTextToSize(blok, 180);
-    if (y + lines.length * 5 > 280) {
-      pdf.addPage();
-      y = 10;
-    }
+    const t = k + "\n- " +
+      (summaryData[k].size ? [...summaryData[k]].join("\n- ") : "Geen periode");
+    const lines = pdf.splitTextToSize(t, 180);
     pdf.text(lines, 10, y);
-    y += lines.length * 5 + 6;
+    y += lines.length * 6 + 4;
+    if (y > 270) { pdf.addPage(); y = 10; }
   });
 
   pdf.save("planstrasse_fasering.pdf");
