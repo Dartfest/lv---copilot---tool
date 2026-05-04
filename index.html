@@ -22,7 +22,65 @@
 <button onclick="lees()">Lees LV</button>
 
 <pre id="output"></pre>
+  <hr>
 
+<h2>Planstraße – fasering (uit LV)</h2>
+<button onclick="analyse()">Analyseer Planstraßen</button>
+
+<div id="plans"></div>
+<script>
+function analyse() {
+  const text = document.getElementById("output").textContent;
+  const container = document.getElementById("plans");
+  container.innerHTML = "";
+
+  if (!text || !text.trim()) {
+    container.textContent = "Geen LV-tekst beschikbaar.";
+    return;
+  }
+
+  const planRegex = /Planstraße\s+([A-Z])/gi;
+  const dateRegex =
+    /(von\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s+bis\s+\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (\d{1,2}[.\-]\d{1,2}[.\-]\d{4}\s*(t\/m|bis|-)\s*\d{1,2}[.\-]\d{1,2}[.\-]\d{4})|
+     (KW\s*\d+\s*(–|-)\s*\d+)/gi;
+
+  const data = {};
+  let m;
+
+  while ((m = planRegex.exec(text)) !== null) {
+    const key = "Planstraße " + m[1];
+    if (!data[key]) data[key] = new Set();
+
+    const frag = text.substring(m.index, m.index + 1200);
+    let d;
+    while ((d = dateRegex.exec(frag)) !== null) {
+      data[key].add(d[0]);
+    }
+  }
+
+  const keys = Object.keys(data).sort();
+  if (!keys.length) {
+    container.textContent = "Geen Planstraßen gevonden.";
+    return;
+  }
+
+  keys.forEach(k => {
+    const div = document.createElement("div");
+    div.style.borderLeft = "4px solid #2563eb";
+    div.style.background = "#eff6ff";
+    div.style.padding = "8px";
+    div.style.margin = "8px 0";
+
+    const items = data[k].size
+      ? [...data[k]].map(p => `<li>${p}</li>`).join("")
+      : "<li>Geen faseperiode in LV vermeld</li>";
+
+    div.innerHTML = `<strong>${k}</strong><ul>${items}</ul>`;
+    container.appendChild(div);
+  });
+}
+</script>
 <script>
 async function lees() {
   const f = document.getElementById("file").files[0];
