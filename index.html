@@ -2,69 +2,113 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Copilot Tool – Stabiele Werkvoorbereiding</title>
+<title>LV Copilot Tool – Master Werkvoorbereiding Infra</title>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f5f7fa; padding:20px; }
 .box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
-textarea { width:100%; min-height:220px; font-family:monospace; padding:10px; }
-button { padding:8px 14px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; }
+textarea { width:100%; min-height:200px; font-family:monospace; padding:10px; }
+button { padding:8px 14px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer; margin-right:6px; }
+button.secondary { background:#6b7280; }
 .chunk { padding:12px; border-radius:6px; margin-bottom:12px; }
 .red { background:#fee2e2; border-left:6px solid #dc2626; }
 .orange { background:#ffedd5; border-left:6px solid #ea580c; }
 .green { background:#dcfce7; border-left:6px solid #16a34a; }
+.small { font-size:12px; color:#555; }
+pre { white-space:pre-wrap; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Copilot Tool – Betrouwbare Analyse</h1>
+<h1>LV Copilot Tool – Master Werkvoorbereiding</h1>
+<p class="small">Volledige LV + K&L analyse – calculatie & uitvoering</p>
 
 <div class="box">
-<h2>1. LV‑tekst (plakken uit PDF / Word)</h2>
-<p><strong>Plak hier gekopieerde tekst.</strong>  
-(Gescanne PDF’s eerst omzetten naar tekst)</p>
-<textarea id="lvtext"></textarea>
-<button onclick="analyse()">Analyseer</button>
+<h2>1. LV‑bestanden (PDF met tekstlaag)</h2>
+<input type="file" id="lvFiles" multiple accept=".pdf">
+<button class="secondary" onclick="readLVFiles()">Lees LV</button>
+<p class="small" id="lvStatus"></p>
 </div>
 
 <div class="box">
-<h2>2. Analyse per LV‑deel</h2>
-<div id="output"></div>
+<h2>2. LV‑tekst (controle / aanvullen)</h2>
+<textarea id="lvtext"></textarea>
+<button onclick="splitLV()">Splits in LV‑delen</button>
+</div>
+
+<div class="box">
+<h2>3. Kabels & Leidingen (PDF / TXT)</h2>
+<input type="file" id="klFiles" multiple>
+<button class="secondary" onclick="readKLFiles()">Lees K&L</button>
+<p class="small" id="klStatus"></p>
+</div>
+
+<div class="box">
+<h2>4. LV‑delen + K&L + impact</h2>
+<div id="chunks"></div>
+<button onclick="exportPDF()">Export uitvoerder‑PDF</button>
 </div>
 
 <script>
-function analyse() {
-  output.innerHTML="";
-  const parts = lvtext.value.match(/[\s\S]{1,3000}/g) || [];
+let KL_TEXT = "";
 
-  parts.forEach((p,i)=>{
-    const t=p.toLowerCase();
-    const netten=[];
-    if(t.includes("gas")) netten.push("Gas");
-    if(t.includes("elektra")) netten.push("Elektra");
-    if(t.includes("water")) netten.push("Water");
-    if(t.includes("telecom")||t.includes("glasvezel")) netten.push("Telecom");
-
-    let cls="green", impact="LAAG";
-    if(netttenRisk(nettten=netten)) {cls="red"; impact="HOOG";}
-    else if(netten.length>1){cls="orange"; impact="MIDDEL";}
-
-    const d=document.createElement("div");
-    d.className=`chunk ${cls}`;
-    d.innerHTML=`
-<strong>LV‑DEEL ${i+1}</strong><br>
-Netten: ${netten.join(", ")||"–"}<br>
-Impact: ${impact}<br><br>
-<pre>${p}</pre>`;
-    output.appendChild(d);
-  });
+/* ===== PDF lezen met foutmelding ===== */
+async function readTextFromPDF(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument(new Uint8Array(buf)).promise;
+  let text = "";
+  for(let p=1;p<=pdf.numPages;p++){
+    const page = await pdf.getPage(p);
+    const c = await page.getTextContent();
+    if(c.items.length===0){
+      throw new Error("PDF bevat geen tekstlaag (gescand)");
+    }
+    text += c.items.map(i=>i.str).join(" ") + "\n";
+  }
+  return text;
 }
 
-function netttenRisk(n){
-  return n.includes("Gas")||n.includes("Elektra");
+/* ===== LV ===== */
+async function readLVFiles(){
+  const files = lvFiles.files;
+  if(!files.length){ alert("Geen LV bestanden"); return; }
+  let t="";
+  try{
+    for(const f of files){
+      t += await readTextFromPDF(f);
+    }
+    lvtext.value = t;
+    lvStatus.innerText = "LV succesvol ingelezen";
+  }catch(e){
+    lvStatus.innerText = "⚠️ LV‑PDF zonder tekstlaag – kopieer tekst handmatig";
+  }
 }
-</script>
 
-</body>
-</html>
+/* ===== K&L ===== */
+async function readKLFiles(){
+  const files = klFiles.files;
+  if(!files.length){ alert("Geen K&L bestanden"); return; }
+  let t="";
+  for(const f of files){
+    if(f.type==="application/pdf"){
+      try{
+        t+=await readTextFromPDF(f);
+      }catch{
+        // negeer gescande PDF, geen crash
+      }
+    } else {
+      t+=await f.text();
+    }
+  }
+  KL_TEXT = t.toLowerCase();
