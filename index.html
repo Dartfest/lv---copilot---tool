@@ -2,104 +2,30 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV + K&L Lezer – Werkend</title>
+<title>LV PDF Lezer – Werkend</title>
 
-<!-- PDF.js (CORRECT geladen) -->
-https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
+<!-- PDF.js – CORRECT -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
 <style>
-body { font-family: Arial, sans-serif; background:#f5f7fa; padding:20px; }
-.box { background:white; padding:16px; border-radius:6px; margin-bottom:20px; }
-textarea { width:100%; min-height:200px; font-family:monospace; padding:10px; }
-button { padding:8px 14px; margin-top:6px; }
-.pre { white-space:pre-wrap; background:#eef; padding:10px; }
-.status { font-size:13px; margin-top:6px; }
+body { font-family: Arial, sans-serif; padding: 20px; background:#f4f6f8; }
+.box { background:#fff; padding:16px; border-radius:6px; }
+textarea { width:100%; min-height:220px; font-family:monospace; }
+.status { margin-top:6px; font-size:13px; }
+button { padding:6px 12px; margin-top:6px; }
 </style>
 </head>
 
 <body>
 
-<h1>LV + K&L PDF Lezer (Werkend)</h1>
+<h2>LV‑PDF lezen (test)</h2>
 
 <div class="box">
-<h2>1. Upload LV‑PDF(s)</h2>
-<input type="file" id="lvFiles" multiple accept=".pdf">
-<button onclick="readLV()">Lees LV</button>
-<div id="lvStatus" class="status"></div>
-<textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
-</div>
-
-<div class="box">
-<h2>2. Upload K&L‑PDF(s)</h2>
-<input type="file" id="klFiles" multiple accept=".pdf,.txt">
-<button onclick="readKL()">Lees K&L</button>
-<div id="klStatus" class="status"></div>
-<textarea id="klText" placeholder="K&L‑tekst verschijnt hier..."></textarea>
-</div>
-
-<script>
-async function readPDF(file) {
-  const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-  let fullText = "";
-
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-
-    // ROBUUST: ook lege / raar gecodeerde items meenemen
-    const pageText = content.items
-      .map(i => (i.str && i.str.trim()) ? i.str : "")
-      .join(" ");
-
-    fullText += pageText + "\n";
-  }
-
-  return fullText.trim();
-}
-
-/* === LV === */
-async function readLV() {
-  const files = lvFiles.files;
-  if (!files.length) return alert("Geen LV‑PDF gekozen");
-
-  let text = "";
-  try {
-    for (const f of files) {
-      text += await readPDF(f) + "\n";
-    }
-    lvText.value = text;
-    lvStatus.innerText = "✅ LV succesvol gelezen";
-  } catch (e) {
-    lvStatus.innerText = "❌ LV lezen mislukt: " + e.message;
-  }
-}
-
-/* === K&L === */
-async function readKL() {
-  const files = klFiles.files;
-  if (!files.length) return alert("Geen K&L gekozen");
-
-  let text = "";
-  try {
-    for (const f of files) {
-      if (f.type === "application/pdf") {
-        text += await readPDF(f) + "\n";
-      } else {
-        text += await f.text() + "\n";
-      }
-    }
-    klText.value = text;
-    klStatus.innerText = "✅ K&L succesvol gelezen";
-  } catch (e) {
-    klStatus.innerText = "❌ K&L lezen mislukt: " + e.message;
-  }
-}
-</script>
-
-</body>
-</html>
+  <input type="file" id="lvFile" accept=".pdf">
+  <br>
+  <button onclick="readLV()">Lees LV</button>
+  <div id="status" class="status"></div>
