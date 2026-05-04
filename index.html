@@ -2,77 +2,173 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>PDF.js test</title>
+<title>LV + K&L Werkvoorbereiding Tool</title>
 
-<!-- ✅ ENIGE JUISTE MANIER -->
+<!-- ✅ PDF.js correct geladen -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-  window.addEventListener("load", () => {
-    if (!window.pdfjsLib) {
-      document.body.innerHTML =
-        "<h2 style='color:red'>pdf.js NIET geladen</h2>" +
-        "<p>CDN geblokkeerd of script niet geladen.</p>";
-    } else {
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    }
-  });
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; background:#f4f6f8; }
-textarea { width:100%; min-height:220px; font-family:monospace; }
-button { margin-top:8px; }
+body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
+.box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
+h1,h2 { margin-top:0 }
+textarea { width:100%; min-height:180px; font-family:monospace; padding:10px; }
+button { padding:6px 12px; margin-top:6px; }
+.chunk { padding:12px; border-radius:6px; margin-top:12px; }
+.green { background:#dcfce7; border-left:6px solid #16a34a; }
+.orange { background:#ffedd5; border-left:6px solid #ea580c; }
+.red { background:#fee2e2; border-left:6px solid #dc2626; }
+.small { font-size:12px; color:#555; }
+pre { white-space:pre-wrap; background:#f9fafb; padding:10px; }
 </style>
 </head>
 
 <body>
 
-<h2>PDF‑lees test (fundering)</h2>
+<h1>LV + K&L – Werkvoorbereiding Infra</h1>
 
-<input type="file" id="file" accept=".pdf"><br>
-<button onclick="lees()">Lees PDF</button>
+<div class="box">
+  <h2>1. LV‑PDF(s)</h2>
+  <input type="file" id="lvFiles" multiple accept=".pdf">
+  <br>
+  <button onclick="readLV()">Lees LV</button>
+  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
+</div>
 
-<p id="status"></p>
-<textarea id="out" placeholder="Tekst verschijnt hier..."></textarea>
+<div class="box">
+  <h2>2. Kabels & Leidingen (PDF / TXT)</h2>
+  <input type="file" id="klFiles" multiple accept=".pdf,.txt">
+  <br>
+  <button onclick="readKL()">Lees K&amp;L</button>
+  <textarea id="klText" placeholder="K&amp;L‑tekst verschijnt hier..."></textarea>
+</div>
+
+<div class="box">
+  <h2>3. Analyse per LV‑deel</h2>
+  <button onclick="analyseLV()">Analyseer</button>
+  <div id="output"></div>
+</div>
 
 <script>
-async function lees() {
-  const f = document.getElementById("file").files[0];
-  const status = document.getElementById("status");
-  const out = document.getElementById("out");
+/* ===== PDF lezen ===== */
+async function readPDF(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let text = "";
 
-  if (!f) {
-    alert("Geen PDF gekozen");
-    return;
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const c = await page.getTextContent();
+    text += c.items.map(i => i.str).join(" ") + "\n";
   }
+  return text;
+}
 
-  try {
-    const buf = await f.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+/* ===== LV ===== */
+async function readLV() {
+  let t = "";
+  for (const f of lvFiles.files) {
+    t += await readPDF(f);
+  }
+  lvText.value = t;
+}
 
-    let text = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
+/* ===== K&L ===== */
+async function readKL() {
+  let t = "";
+  for (const f of klFiles.files) {
+    if (f.type === "application/pdf") {
+      t += await readPDF(f);
+    } else {
+      t += await f.text();
+    }
+  }
+  klText.value = t.toLowerCase();
+}
 
-      if (content.items.length === 0) {
-        status.innerText = "❌ PDF heeft geen tekstlaag (gescand)";
-        return;
-      }
+/* ===== Analyse LV ===== */
+function analyseLV() {
+  output.innerHTML = "";
 
-      text += content.items.map(it => it.str).join(" ") + "\n\n";
+  const parts = lvText.value.match(/[\s\S]{1,3000}/g) || [];
+  const kl = klText.value;
+
+  parts.forEach((p, i) => {
+    const t = (p + kl).toLowerCase();
+
+    /* Netten */
+    const netten = [];
+    if (t.includes("gas")) netten.push("Gas");
+    if (t.includes("elektra")) netten.push("Elektra");
+    if (t.includes("water")) netten.push("Water");
+    if (t.includes("telecom") || t.includes("glasvezel")) netten.push("Telecom");
+    if (t.includes("riool")) netten.push("Riool");
+
+    /* Risico’s */
+    const risico = [];
+    if (t.includes("meerwerk") || t.includes("abweich"))
+      risico.push("Meerwerkpotentieel");
+    if (t.includes("voorwaarde") || t.includes("vertrag"))
+      risico.push("Contractueel risico");
+    if (netten.length >= 3)
+      risico.push("Veel K&L → onzekere situatie");
+
+    /* Knelpunten */
+    const knelpunt = [];
+    if (netten.length > 0)
+      knelpunt.push("Aanwezige kabels & leidingen");
+    if (netten.includes("Gas") || netten.includes("Elektra"))
+      knelpunt.push("Veiligheidszones → handmatig werken");
+    if (netten.length > 1)
+      knelpunt.push("Beperkte graafruimte → lage productie");
+    if (t.includes("verkehr") || t.includes("omleiding"))
+      knelpunt.push("Verkeersmaatregelen / fasering");
+
+    /* Bestellen */
+    const bestellen = [];
+    if (t.includes("materiaal") || t.includes("liefer"))
+      bestellen.push("Materialen");
+    if (t.includes("kraan") || t.includes("gerät"))
+      bestellen.push("Materieel");
+    if (t.includes("keuring") || t.includes("prüfung"))
+      bestellen.push("Keuringen");
+    if (netten.length > 0)
+      bestellen.push("Afstemming netbeheerders");
+
+    /* Impact */
+    let cls = "green", impact = "LAAG", fase = "Normale uitvoering";
+    if (netten.includes("Gas") || netten.includes("Elektra")) {
+      cls = "red"; impact = "HOOG"; fase = "Handmatig / gefaseerd";
+    } else if (netten.length > 1) {
+      cls = "orange"; impact = "MIDDEL"; fase = "Productiebeperking";
     }
 
-    out.value = text;
-    status.innerText = "✅ PDF succesvol gelezen";
+    const d = document.createElement("div");
+    d.className = `chunk ${cls}`;
+    d.innerHTML = `
+<strong>LV‑DEEL ${i+1}</strong><br>
+<strong>Kabels & leidingen:</strong> ${netten.join(", ") || "–"}<br>
+<strong>Impact:</strong> ${impact} – ${fase}<br><br>
 
-  } catch (e) {
-    status.innerText = "❌ Fout: " + e.message;
-    console.error(e);
-  }
+<strong>🔴 Risico’s</strong>
+${risico.length ? "<ul>" + risico.map(r => `<li>${r}</li>`).join("") + "</ul>" : "<p>–</p>"}
+
+<strong>🟠 Knelpunten</strong>
+${knelpunt.length ? "<ul>" + knelpunt.map(k => `<li>${k}</li>`).join("") + "</ul>" : "<p>–</p>"}
+
+<strong>🟢 Bestellen / vastleggen</strong>
+${bestellen.length ? "<ul>" + bestellen.map(b => `<li>${b}</li>`).join("") + "</ul>" : "<p>–</p>"}
+
+<pre>${p}</pre>
+`;
+    output.appendChild(d);
+  });
 }
 </script>
 
 </body>
 </html>
+``
