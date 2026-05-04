@@ -19,12 +19,11 @@ body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
 h1,h2,h3 { margin-top:0 }
 textarea { width:100%; min-height:150px; font-family:monospace; padding:10px; }
-button { padding:6px 12px; margin:4px 4px 4px 0; }
+button { padding:6px 12px; margin:4px 6px 4px 0; }
 .chunk { padding:14px; border-radius:6px; margin-top:16px; }
 .green { background:#dcfce7; border-left:6px solid #16a34a; }
 .orange { background:#ffedd5; border-left:6px solid #ea580c; }
 .red { background:#fee2e2; border-left:6px solid #dc2626; }
-pre { white-space:pre-wrap; background:#f9fafb; padding:10px; }
 ul { margin-left:18px; }
 </style>
 </head>
@@ -50,18 +49,13 @@ ul { margin-left:18px; }
 <div class="box">
   <h2>3. Analyse</h2>
   <button onclick="analyseLV()">Analyseer</button>
-  <button onclick="exportUitvoerderPDF()">PDF – Uitvoerdersrapport</button>
+  <button onclick="exportUitvoerderPDF()">PDF – Uitvoerderssamenvatting</button>
   <button onclick="exportBestelPDF()">PDF – Bestellijst per fase</button>
   <div id="output"></div>
 </div>
 
-<div class="box">
-  <h2>4. Projectbreed bestel‑ & regeloverzicht per fase</h2>
-  <div id="faseOverzicht"></div>
-</div>
-
 <script>
-/* ===== PDF lezen ===== */
+/* ===== PDF inlezen ===== */
 async function readPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -89,26 +83,13 @@ async function readKL() {
   klText.value=t.toLowerCase();
 }
 
+/* ===== Analyse ===== */
+let uitvoerdersData = [];
 function analyseLV() {
+  uitvoerdersData = [];
   output.innerHTML="";
-  faseOverzicht.innerHTML="";
-
   const parts = lvText.value.match(/[\s\S]{1,3000}/g)||[];
   const kl = klText.value;
-
-  const fasePrep = new Set([
-    "KLIC & aanvullende K&L‑gegevens",
-    "Afstemming netbeheerders",
-    "Vergunningen / verkeersmaatregelen"
-  ]);
-  const faseExec = new Set([
-    "Materieel (kraan, klein materieel)",
-    "Materialen conform LV"
-  ]);
-  const faseEnd = new Set([
-    "Keuringen",
-    "Revisie & opleverdossier"
-  ]);
 
   parts.forEach((p,i)=>{
     const t=(p+kl).toLowerCase();
@@ -120,80 +101,105 @@ function analyseLV() {
     if(t.includes("riool")) netten.push("Riool");
 
     let cls="green",impact="LAAG",fase="Normaal",meerwerk="Geen direct meerwerk";
+    let acties=[];
+
     if(netten.includes("Gas")||netten.includes("Elektra")){
-      cls="red";impact="HOOG";fase="Handmatig / gefaseerd";
+      cls="red"; impact="HOOG"; fase="Handmatig / gefaseerd";
       meerwerk="Meerwerk waarschijnlijk";
+      acties.push(
+        "Handmatig graven nabij netten",
+        "Gefaseerd uitvoeren",
+        "Extra toezicht / veiligheidsmaatregelen"
+      );
     } else if(netten.length>1){
-      cls="orange";impact="MIDDEL";fase="Productiebeperking";
+      cls="orange"; impact="MIDDEL"; fase="Verlaagde productie";
       meerwerk="Meerwerk mogelijk";
+      acties.push(
+        "Beperkte werkvakken",
+        "Aangepaste productiesnelheid"
+      );
     }
 
-    if(netten.length) {
-      fasePrep.add("Proefsleuven");
-      faseExec.add("Veiligheidsvoorzieningen");
+    if(netten.length){
+      acties.push("Netbeheerders vooraf informeren");
     }
+
+    uitvoerdersData.push({
+      deel:i+1, netten, impact, fase, meerwerk, acties
+    });
 
     const d=document.createElement("div");
     d.className=`chunk ${cls}`;
     d.innerHTML=`
 <h3>LV‑DEEL ${i+1}</h3>
-<strong>K&L:</strong> ${netten.join(", ")||"–"}<br>
+<strong>K&amp;L:</strong> ${netten.join(", ")||"–"}<br>
 <strong>Impact:</strong> ${impact} – ${fase}<br>
 <strong>Meerwerk:</strong> ${meerwerk}
-
-<h4>Conclusie K&amp;L</h4>
-<p>${netten.length
-?"Kabels en leidingen bepalen werkwijze, fasering en productiesnelheid."
-:"Geen beperkende K&L bekend."}</p>
-
-<pre>${p}</pre>`;
+`;
     output.appendChild(d);
   });
-
-  faseOverzicht.innerHTML=`
-<h3>Voorbereidingsfase</h3>
-<ul>${[...fasePrep].map(i=>`<li>${i}</li>`).join("")}</ul>
-<h3>Uitvoeringsfase</h3>
-<ul>${[...faseExec].map(i=>`<li>${i}</li>`).join("")}</ul>
-<h3>Afrondingsfase</h3>
-<ul>${[...faseEnd].map(i=>`<li>${i}</li>`).join("")}</ul>`;
 }
 
-/* ===== PDF 1: Uitvoerdersrapport ===== */
+/* ===== PDF 1: UITVOERDERSSAMENVATTING ===== */
 function exportUitvoerderPDF(){
   const { jsPDF } = window.jspdf;
   const pdf=new jsPDF();
   let y=10;
 
   pdf.setFontSize(12);
-  pdf.text("Uitvoerdersrapport – LV & K&L",10,y); y+=10;
+  pdf.text("Uitvoerderssamenvatting – LV & K&L",10,y); y+=10;
   pdf.setFontSize(10);
 
-  document.querySelectorAll(".chunk").forEach(c=>{
-    const text=pdf.splitTextToSize(c.innerText,180);
+  uitvoerdersData.forEach(d=>{
+    const blok = `
+LV-deel ${d.deel}
+K&L: ${d.netten.join(", ")||"–"}
+Impact: ${d.impact} – ${d.fase}
+Meerwerk: ${d.meerwerk}
+
+Uitvoering:
+- ${d.acties.join("\n- ")}
+`;
+    const text = pdf.splitTextToSize(blok,180);
     if(y+text.length*5>280){ pdf.addPage(); y=10; }
     pdf.text(text,10,y);
     y+=text.length*5+8;
   });
 
-  pdf.save("uitvoerdersrapport-LV-KL.pdf");
+  pdf.save("uitvoerderssamenvatting.pdf");
 }
 
-/* ===== PDF 2: Bestellijst per fase ===== */
+/* ===== PDF 2: BESTELLIJST PER FASE ===== */
 function exportBestelPDF(){
   const { jsPDF } = window.jspdf;
   const pdf=new jsPDF();
   let y=10;
 
   pdf.setFontSize(12);
-  pdf.text("Bestel- & regeloverzicht per fase",10,y); y+=10;
+  pdf.text("Bestellijst & acties per fase",10,y); y+=10;
   pdf.setFontSize(10);
 
-  const text = pdf.splitTextToSize(
-    document.getElementById("faseOverzicht").innerText,180
-  );
-  pdf.text(text,10,y);
+  const tekst = `
+VOORBEREIDINGSFASE
+- KLIC + aanvullende kabel- en leidinggegevens
+- Afstemming netbeheerders (verplicht bij gas/elektra)
+- Vergunningen & verkeersmaatregelen
+- Proefsleuven bij onduidelijke ligging
 
+UITVOERINGSFASE
+- Kraan + klein materieel afgestemd op fasering
+- Handgereedschap voor handmatig werk
+- Beschermingsmiddelen nabij netten
+- Extra mankracht bij beperkte werkruimte
+
+AFRONDINGSFASE
+- Keuringen (verdichting / herstel)
+- Revisie- en opleverdossier
+- Eindinspectie omgeving
+`;
+
+  const text = pdf.splitTextToSize(tekst,180);
+  pdf.text(text,10,y);
   pdf.save("bestellijst-per-fase.pdf");
 }
 </script>
