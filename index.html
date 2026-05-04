@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>AI Tender Engine (LV Analyse)</title>
+<title>LV Analyse Engine (Smart)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -19,12 +19,12 @@ button { padding:8px 14px; margin:6px; }
 
 <body>
 
-<h1>AI Tender Engine</h1>
+<h1>LV Analyse Engine (Smart – zonder AI)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
-<button onclick="analyse()">AI Analyse</button>
+<button onclick="analyse()">Analyse</button>
 <button onclick="exportPDF()">Export PDF</button>
 <textarea id="lvText"></textarea>
 </div>
@@ -33,10 +33,7 @@ button { padding:8px 14px; margin:6px; }
 
 <script>
 
-// ===== API KEY =====
-const OPENAI_API_KEY = "PLAATS_HIER_JE_API_KEY";
-
-// ===== PDF INLEZEN =====
+// ===== PDF =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -54,111 +51,132 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== AI CALL =====
-async function aiAnalyse(text){
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions",{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "Authorization":"Bearer " + OPENAI_API_KEY
-    },
-    body:JSON.stringify({
-      model:"gpt-4o-mini",
-      messages:[
-        {
-          role:"system",
-          content:`
-Je bent een senior werkvoorbereider / tender engineer.
-
-Analyseer een LV (bestek) en geef een professioneel rapport.
-
-Structuur:
-
-1. Samenvatting (uitgebreid, meerdere alinea’s)
-2. Scope werkzaamheden
-3. Fasering & planning
-4. Contractanalyse
-5. Afhankelijkheden
-6. Risicoanalyse (onderverdeeld in):
-   - Planning
-   - Contract
-   - Uitvoering
-   - Omgeving
-
-Schrijf in helder Nederlands, professioneel en concreet.
-`
-        },
-        {
-          role:"user",
-          content:text
-        }
-      ]
-    })
-  });
-
-  const json = await res.json();
-  return json.choices[0].message.content;
+// ===== HELPER =====
+function zinZoeken(text, woorden){
+  return woorden.some(w => text.includes(w));
 }
 
 // ===== ANALYSE =====
-let rapportTekst = "";
+let analyseData = {};
 
-async function analyse(){
+function analyse(){
 
-  const text = document.getElementById("lvText").value;
+  const raw = document.getElementById("lvText").value;
+  const text = raw.toLowerCase();
 
-  if(!OPENAI_API_KEY || OPENAI_API_KEY === "PLAATS_HIER_JE_API_KEY"){
-    alert("Vul eerst je API key in");
-    return;
+  // ===== SCOPE =====
+  let scope = [];
+  if(zinZoeken(text,["kanal"])) scope.push("riolering");
+  if(zinZoeken(text,["kabel","leitung"])) scope.push("kabels en leidingen");
+  if(zinZoeken(text,["straße"])) scope.push("infrastructuur en bouwwegen");
+  if(zinZoeken(text,["versorgung"])) scope.push("nutsvoorzieningen");
+
+  // ===== PLANNING =====
+  let planning = text.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+\d{4}/gi) || [];
+
+  // ===== FASERING =====
+  let fases = [];
+  let faseRegex = /(\d+)\.\s*bauabschnitt/gi;
+  let m;
+  while((m=faseRegex.exec(text))){
+    fases.push("fase " + m[1]);
   }
 
-  const out = document.getElementById("result");
-  out.innerHTML = "AI analyse bezig...";
+  // ===== CONTRACT =====
+  let contract = [];
+  if(zinZoeken(text,["nicht vergütet"]))
+    contract.push("kosten worden niet apart vergoed");
+  if(zinZoeken(text,["einzuplanen"]))
+    contract.push("planning en inzet middelen ligt bij aannemer");
+  if(zinZoeken(text,["verbindlich"]))
+    contract.push("planning is bindend");
+  if(zinZoeken(text,["abstimmung"]))
+    contract.push("afstemming verplicht met opdrachtgever en derden");
 
-  try{
-    const result = await aiAnalyse(text);
-    rapportTekst = result;
+  // ===== BEPERKINGEN =====
+  let beperkingen = [];
+  if(zinZoeken(text,["nicht parallel"]))
+    beperkingen.push("geen parallel werk toegestaan");
+  if(zinZoeken(text,["ohne unterbrechung"]))
+    beperkingen.push("continu uitvoeren verplicht");
 
-    out.innerHTML = `
-    <div class="section">
-      <h3>AI Analyse Rapport</h3>
-      <pre style="white-space:pre-wrap;">${result}</pre>
-    </div>
-    `;
+  // ===== AFHANKELIJK =====
+  let afhankelijk = [];
+  if(zinZoeken(text,["drittfirmen","versorgung"]))
+    afhankelijk.push("nutsbedrijven / derden");
 
-  }catch(e){
-    out.innerHTML = "Fout bij AI analyse";
-  }
+  // ===== SAMENVATTING (LANG!) =====
+  let samenvatting = `
+  Het voorliggende bestek betreft een civieltechnisch project waarin werkzaamheden centraal staan zoals ${scope.join(", ") || "diverse infrastructurele werkzaamheden"}.
+
+  De uitvoering ${fases.length ? "is gefaseerd opgebouwd (" + fases.join(", ") + ")" : "kent geen expliciet benoemde fasering"}, wat betekent dat de volgorde van werkzaamheden een belangrijke rol speelt binnen de planning.
+
+  De planning bevat referenties naar ${planning.join(", ") || "geen expliciete tijdsperiodes"}, wat duidt op ${planning.length ? "een tijdsgebonden en mogelijk kritische uitvoeringsperiode" : "een globaal omschreven uitvoeringsduur"}.
+
+  Binnen het project gelden beperkingen zoals ${beperkingen.join(", ") || "beperkte expliciete beperkingen"}, waardoor de flexibiliteit in uitvoering wordt beperkt.
+
+  Daarnaast is er sprake van afhankelijkheden met betrekking tot ${afhankelijk.join(", ") || "beperkte externe partijen"}, wat inhoudt dat de voortgang mede wordt bepaald door derden en externe factoren.
+
+  Contractueel blijkt dat ${contract.length ? contract.join(", ") : "de aannemer een belangrijke verantwoordelijkheid draagt"}, waarbij risico’s op het gebied van planning, kosten en uitvoering grotendeels bij de aannemer liggen.
+
+  De combinatie van deze factoren maakt dat het project een hoge mate van coördinatie, planning en beheersing vereist. De uitvoeringsstrategie zal gericht moeten zijn op het minimaliseren van verstoringen en het effectief omgaan met afhankelijkheden en beperkingen.
+  `;
+
+  // ===== RISICO =====
+  let risico = [];
+
+  if(beperkingen.length)
+    risico.push("beperkingen verhogen planningsdruk en verminderen flexibiliteit");
+
+  if(afhankelijk.length)
+    risico.push("afhankelijkheid van derden kan leiden tot vertraging");
+
+  if(contract.length)
+    risico.push("contractuele risico’s liggen grotendeels bij aannemer");
+
+  if(planning.length > 2)
+    risico.push("lange doorlooptijd verhoogt kans op verstoringen");
+
+  if(risico.length === 0)
+    risico.push("algemene uitvoeringsrisico’s aanwezig");
+
+  analyseData = { samenvatting, risico };
+
+  // ===== OUTPUT =====
+  document.getElementById("result").innerHTML = `
+  <div class="section">
+    <h3>Uitgebreide samenvatting</h3>
+    <p>${samenvatting}</p>
+  </div>
+
+  <div class="section">
+    <h3>Risico's</h3>
+    <ul class="risk">
+    ${risico.map(r=>`<li>${r}</li>`).join("")}
+    </ul>
+  </div>
+  `;
 }
 
 // ===== PDF =====
 function exportPDF(){
 
-  if(!rapportTekst){
-    alert("Eerst analyseren");
-    return;
-  }
-
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  const lines = doc.splitTextToSize(rapportTekst,180);
-
   let y=15;
 
-  doc.setFontSize(12);
+  const lines = doc.splitTextToSize(analyseData.samenvatting,180);
+  doc.text(lines,10,y);
+  y += lines.length*5 + 10;
 
-  lines.forEach(line=>{
-    if(y > 280){
-      doc.addPage();
-      y=15;
-    }
-    doc.text(line,10,y);
+  doc.setTextColor(200,0,0);
+  analyseData.risico.forEach(r=>{
+    doc.text("- "+r,10,y);
     y+=5;
   });
 
-  doc.save("AI_LV_Analyse.pdf");
+  doc.save("LV_Analyse_Smart.pdf");
 }
 
 </script>
