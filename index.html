@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse Engine PRO</title>
+<title>LV Analyse PRO++</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -19,7 +19,7 @@ button { padding:8px 14px; margin:6px; }
 
 <body>
 
-<h1>LV Analyse Engine (PRO)</h1>
+<h1>LV Analyse PRO++</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -33,7 +33,11 @@ button { padding:8px 14px; margin:6px; }
 
 <script>
 
-// ================= PDF =================
+// ===== CONFIG (optioneel AI) =====
+// zet hier je OpenAI key als je wil upgraden
+const OPENAI_API_KEY = ""; 
+
+// ===== PDF =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -51,130 +55,124 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ================= ENGINE =================
+// ===== ANALYSE DATA =====
 let analyseData = {};
 
-function analyse(){
+// ===== BASIS ANALYSE =====
+function baseAnalyse(text){
 
-  const raw = document.getElementById("lvText").value;
-  const text = raw.toLowerCase();
+  text = text.toLowerCase();
 
-  const out = document.getElementById("result");
-  out.innerHTML="";
-
-  // ===== WERKZAAMHEDEN =====
-  let werk = [];
-  if(text.includes("kanal")) werk.push("Aanleg riolering");
-  if(text.includes("kabel") || text.includes("leitung")) werk.push("Kabels en leidingen");
-  if(text.includes("straße")) werk.push("Aanleg infrastructuur / bouwwegen");
+  const werk = [];
+  if(text.includes("kanal")) werk.push("Riolering");
+  if(text.includes("kabel") || text.includes("leitung")) werk.push("Kabels/leidingen");
+  if(text.includes("straße")) werk.push("Infrastructuur");
   if(text.includes("versorgung")) werk.push("Nutsvoorzieningen");
 
-  // ===== PLANNING =====
-  let planning = [];
-  const maanden = text.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+\d{4}/gi);
-  if(maanden) planning = maanden;
+  const beperkingen = [];
+  if(text.includes("nicht parallel")) beperkingen.push("Geen parallel werk");
+  if(text.includes("ohne unterbrechung")) beperkingen.push("Continu uitvoeren");
+  if(text.includes("zeitvorgaben")) beperkingen.push("Strikte planning");
 
-  // ===== FASES =====
-  let fases = [];
-  const faseRegex = /(\d+)\.\s*bauabschnitt.*?planstraße\s+([a-z])/gi;
-  let m;
-  while((m=faseRegex.exec(text))){
-    fases.push(`Fase ${m[1]} - Planstraße ${m[2].toUpperCase()}`);
+  const afhankelijk = [];
+  if(text.includes("drittfirmen")) afhankelijk.push("Derden (nutsbedrijven)");
+
+  const planning = text.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+\d{4}/gi) || [];
+
+  return { werk, beperkingen, afhankelijk, planning };
+}
+
+// ===== RISICO ENGINE =====
+function buildRisico(data){
+
+  let r=[];
+
+  if(data.beperkingen.length)
+    r.push("Beperkingen verhogen planningsdruk en kans op vertraging");
+
+  if(data.afhankelijk.length)
+    r.push("Afhankelijkheid van derden vormt grootste uitvoeringsrisico");
+
+  if(data.planning.length > 2)
+    r.push("Langlopende planning verhoogt faalkans en afstemmingscomplexiteit");
+
+  if(r.length===0)
+    r.push("Algemene uitvoeringsrisico's aanwezig");
+
+  return r;
+}
+
+// ===== AI SAMENVATTING =====
+async function aiSamenvatting(text){
+
+  if(!OPENAI_API_KEY) return null;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "Authorization":"Bearer "+OPENAI_API_KEY
+    },
+    body:JSON.stringify({
+      model:"gpt-4o-mini",
+      messages:[
+        {
+          role:"system",
+          content:"Je bent een civieltechnisch werkvoorbereider. Analyseer dit LV professioneel."
+        },
+        {
+          role:"user",
+          content:`Geef een professionele samenvatting + risico analyse:\n\n${text}`
+        }
+      ]
+    })
+  });
+
+  const json = await res.json();
+  return json.choices[0].message.content;
+}
+
+// ===== HOOFD ANALYSE =====
+async function analyse(){
+
+  const raw = document.getElementById("lvText").value;
+  const out = document.getElementById("result");
+  out.innerHTML="Analyseren...";
+
+  const base = baseAnalyse(raw);
+  const risico = buildRisico(base);
+
+  let samenvatting = await aiSamenvatting(raw);
+
+  // fallback zonder AI
+  if(!samenvatting){
+    samenvatting = `
+    Dit project omvat werkzaamheden zoals ${base.werk.join(", ")}.
+    De uitvoering kent beperkingen (${base.beperkingen.join(", ") || "geen expliciete"}) 
+    en afhankelijkheden (${base.afhankelijk.join(", ") || "beperkt"}).
+    De planning bevat elementen zoals ${base.planning.join(", ") || "onduidelijk"}.
+    Dit vraagt om strakke coördinatie en planning.
+    `;
   }
 
-  // ===== BEPERKINGEN =====
-  let beperkingen = [];
-  if(text.includes("nicht parallel")) beperkingen.push("Geen parallel werk toegestaan");
-  if(text.includes("ohne unterbrechung")) beperkingen.push("Werkzaamheden zonder onderbreking uitvoeren");
-  if(text.includes("zeitvorgaben")) beperkingen.push("Strikte tijdseisen");
+  analyseData = { samenvatting, risico };
 
-  // ===== AFHANKELIJKHEDEN =====
-  let afhankelijk = [];
-  if(text.includes("drittfirmen") || text.includes("versorgung"))
-    afhankelijk.push("Afhankelijk van derden (nutsbedrijven)");
-
-  // ===== RISICO =====
-  let risico = [];
-
-  if(beperkingen.length)
-    risico.push("Beperkingen in uitvoering verhogen planningsdruk");
-
-  if(afhankelijk.length)
-    risico.push("Afhankelijkheden van derden kunnen vertraging veroorzaken");
-
-  if(text.includes("unterbrechung"))
-    risico.push("Onderbrekingen leiden tot inefficiëntie en kosten");
-
-  if(fases.length && text.includes("nicht parallel"))
-    risico.push("Fasering zonder overlap verlengt doorlooptijd");
-
-  if(risico.length === 0)
-    risico.push("Algemene uitvoeringsrisico's aanwezig");
-
-  // ===== SAMENVATTING (ECHTE TEKST) =====
-  let samenvatting = `
-  Het project omvat ${werk.join(", ")}.
-  `;
-
-  if(fases.length){
-    samenvatting += `De uitvoering is opgedeeld in ${fases.length} fases (${fases.join(", ")}). `;
-  }
-
-  if(planning.length){
-    samenvatting += `De planning loopt over de periode ${planning.join(", ")}. `;
-  }
-
-  if(afhankelijk.length){
-    samenvatting += `De uitvoering is afhankelijk van derden. `;
-  }
-
-  if(beperkingen.length){
-    samenvatting += `Er gelden belangrijke beperkingen zoals ${beperkingen.join(", ")}. `;
-  }
-
-  samenvatting += `Dit vraagt om een strakke planning en intensieve coördinatie.`;
-
-  analyseData = {
-    werk, planning, fases, beperkingen, afhankelijk, risico, samenvatting
-  };
-
-  // ===== OUTPUT =====
   out.innerHTML = `
-
   <div class="section">
-    <h3>Samenvatting</h3>
+    <h3>Uitgebreide samenvatting</h3>
     <p>${samenvatting}</p>
   </div>
 
   <div class="section">
-    <h3>Werkzaamheden</h3>
-    <ul>${werk.map(w=>`<li>${w}</li>`).join("")}</ul>
+    <h3>Risico analyse</h3>
+    <ul class="risk">
+      ${risico.map(r=>`<li>${r}</li>`).join("")}
+    </ul>
   </div>
-
-  <div class="section">
-    <h3>Fasering</h3>
-    <ul>${fases.length ? fases.map(f=>`<li>${f}</li>`).join("") : "<li>Niet expliciet benoemd</li>"}</ul>
-  </div>
-
-  <div class="section">
-    <h3>Planning</h3>
-    <ul>${planning.length ? planning.map(p=>`<li>${p}</li>`).join("") : "<li>Niet duidelijk gespecificeerd</li>"}</ul>
-  </div>
-
-  <div class="section">
-    <h3>Beperkingen</h3>
-    <ul>${beperkingen.length ? beperkingen.map(b=>`<li>${b}</li>`).join("") : "<li>Geen specifieke beperkingen gevonden</li>"}</ul>
-  </div>
-
-  <div class="section">
-    <h3>Risico's</h3>
-    <ul class="risk">${risico.map(r=>`<li>${r}</li>`).join("")}</ul>
-  </div>
-
   `;
 }
 
-// ================= PDF =================
+// ===== PDF =====
 function exportPDF(){
 
   if(!analyseData.samenvatting){
