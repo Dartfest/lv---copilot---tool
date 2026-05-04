@@ -19,7 +19,7 @@ body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
 h1,h2,h3 { margin-top:0 }
 textarea { width:100%; min-height:150px; font-family:monospace; padding:10px; }
-button { padding:6px 12px; margin-top:6px; }
+button { padding:6px 12px; margin:4px 4px 4px 0; }
 .chunk { padding:14px; border-radius:6px; margin-top:16px; }
 .green { background:#dcfce7; border-left:6px solid #16a34a; }
 .orange { background:#ffedd5; border-left:6px solid #ea580c; }
@@ -31,7 +31,7 @@ ul { margin-left:18px; }
 
 <body>
 
-<h1>LV + K&amp;L – Werkvoorbereiding Infra</h1>
+<h1>LV + K&L – Werkvoorbereiding Infra</h1>
 
 <div class="box">
   <h2>1. LV‑PDF(s)</h2>
@@ -50,7 +50,8 @@ ul { margin-left:18px; }
 <div class="box">
   <h2>3. Analyse</h2>
   <button onclick="analyseLV()">Analyseer</button>
-  <button onclick="exportPDF()">Exporteer uitvoerder‑PDF</button>
+  <button onclick="exportUitvoerderPDF()">PDF – Uitvoerdersrapport</button>
+  <button onclick="exportBestelPDF()">PDF – Bestellijst per fase</button>
   <div id="output"></div>
 </div>
 
@@ -60,6 +61,7 @@ ul { margin-left:18px; }
 </div>
 
 <script>
+/* ===== PDF lezen ===== */
 async function readPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -94,11 +96,19 @@ function analyseLV() {
   const parts = lvText.value.match(/[\s\S]{1,3000}/g)||[];
   const kl = klText.value;
 
-  const faseSet = {
-    prep:new Set(["KLIC","Netbeheerder","Vergunning","Proefsleuven"]),
-    exec:new Set(["Materieel","Materialen","Veiligheidsvoorzieningen"]),
-    end:new Set(["Keuringen","Revisie","Opleverdossier"])
-  };
+  const fasePrep = new Set([
+    "KLIC & aanvullende K&L‑gegevens",
+    "Afstemming netbeheerders",
+    "Vergunningen / verkeersmaatregelen"
+  ]);
+  const faseExec = new Set([
+    "Materieel (kraan, klein materieel)",
+    "Materialen conform LV"
+  ]);
+  const faseEnd = new Set([
+    "Keuringen",
+    "Revisie & opleverdossier"
+  ]);
 
   parts.forEach((p,i)=>{
     const t=(p+kl).toLowerCase();
@@ -118,9 +128,10 @@ function analyseLV() {
       meerwerk="Meerwerk mogelijk";
     }
 
-    faseSet.prep.add("Netbeheerderafstemming");
-    faseSet.exec.add("Graafwerk");
-    faseSet.end.add("Herstel");
+    if(netten.length) {
+      fasePrep.add("Proefsleuven");
+      faseExec.add("Veiligheidsvoorzieningen");
+    }
 
     const d=document.createElement("div");
     d.className=`chunk ${cls}`;
@@ -131,11 +142,9 @@ function analyseLV() {
 <strong>Meerwerk:</strong> ${meerwerk}
 
 <h4>Conclusie K&amp;L</h4>
-<p>
-${netten.length
+<p>${netten.length
 ?"Kabels en leidingen bepalen werkwijze, fasering en productiesnelheid."
-:"Geen beperkende K&L bekend."}
-</p>
+:"Geen beperkende K&L bekend."}</p>
 
 <pre>${p}</pre>`;
     output.appendChild(d);
@@ -143,23 +152,49 @@ ${netten.length
 
   faseOverzicht.innerHTML=`
 <h3>Voorbereidingsfase</h3>
-<ul>${[...faseSet.prep].map(i=>`<li>${i}</li>`).join("")}</ul>
+<ul>${[...fasePrep].map(i=>`<li>${i}</li>`).join("")}</ul>
 <h3>Uitvoeringsfase</h3>
-<ul>${[...faseSet.exec].map(i=>`<li>${i}</li>`).join("")}</ul>
+<ul>${[...faseExec].map(i=>`<li>${i}</li>`).join("")}</ul>
 <h3>Afrondingsfase</h3>
-<ul>${[...faseSet.end].map(i=>`<li>${i}</li>`).join("")}</ul>`;
+<ul>${[...faseEnd].map(i=>`<li>${i}</li>`).join("")}</ul>`;
 }
 
-function exportPDF(){
+/* ===== PDF 1: Uitvoerdersrapport ===== */
+function exportUitvoerderPDF(){
   const { jsPDF } = window.jspdf;
   const pdf=new jsPDF();
   let y=10;
+
+  pdf.setFontSize(12);
   pdf.text("Uitvoerdersrapport – LV & K&L",10,y); y+=10;
+  pdf.setFontSize(10);
+
   document.querySelectorAll(".chunk").forEach(c=>{
-    pdf.text(pdf.splitTextToSize(c.innerText,180),10,y);
-    y+=60;
+    const text=pdf.splitTextToSize(c.innerText,180);
+    if(y+text.length*5>280){ pdf.addPage(); y=10; }
+    pdf.text(text,10,y);
+    y+=text.length*5+8;
   });
-  pdf.save("uitvoerder-werkvoorbereiding.pdf");
+
+  pdf.save("uitvoerdersrapport-LV-KL.pdf");
+}
+
+/* ===== PDF 2: Bestellijst per fase ===== */
+function exportBestelPDF(){
+  const { jsPDF } = window.jspdf;
+  const pdf=new jsPDF();
+  let y=10;
+
+  pdf.setFontSize(12);
+  pdf.text("Bestel- & regeloverzicht per fase",10,y); y+=10;
+  pdf.setFontSize(10);
+
+  const text = pdf.splitTextToSize(
+    document.getElementById("faseOverzicht").innerText,180
+  );
+  pdf.text(text,10,y);
+
+  pdf.save("bestellijst-per-fase.pdf");
 }
 </script>
 
