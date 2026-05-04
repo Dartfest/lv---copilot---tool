@@ -2,23 +2,27 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse PRO+</title>
+<title>LV Analyse Tool PRO</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:200px; font-family:monospace; }
-button { padding:8px 14px; margin:8px 5px 8px 0; }
+textarea { width:100%; height:250px; font-family:monospace; }
+button { padding:8px 14px; margin:8px 0; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
-.plan { background:#eef6ff; border-left:5px solid #2563eb; padding:12px; margin:12px 0; }
+.plan { background:#eef6ff; border-left:4px solid #2563eb; padding:10px; margin:10px 0; }
+.muted { color:#666; font-size:0.9em; }
+.fase { background:#f1f5f9; padding:8px; margin:6px 0; border-radius:4px; }
+.gap { background:#fff4e5; padding:6px; margin:4px 0; border-radius:4px; }
+.risk { background:#ffe4e6; padding:6px; margin:4px 0; border-radius:4px; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse PRO+</h1>
+<h1>LV Analyse (PRO)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -32,7 +36,7 @@ button { padding:8px 14px; margin:8px 5px 8px 0; }
 
 <script>
 
-// ================= PDF LEZEN =================
+// ================= PDF =================
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -55,25 +59,25 @@ function cleanText(t){
   return t.replace(/([A-Za-z])\s([A-Za-z])/g, "$1$2").replace(/\s+/g," ");
 }
 
+// ================= RISICO =================
+function risico(f){
+  let r=[];
+  if(f.afhankelijk) r.push("Afhankelijk van vorige fase → kans op vertraging");
+  if(f.geenParallel) r.push("Geen parallel werk → kritische planning");
+  if(f.verplichteWacht) r.push("Onderbreking → extra kosten");
+  return r.length ? r : ["Geen bijzonderheden"];
+}
+
 // ================= SAMENVATTING =================
-function maakSamenvatting(f){
+function samenvatting(f){
   return [
     "Aanleg riolering en drainage",
     "Aanbrengen kabels en leidingen",
     "Realisatie bouwwegen",
     "Afstemming met nutsbedrijven",
     f.afhankelijk ? "Start afhankelijk van vorige fase" : "",
-    f.verplichteWacht ? "Verplichte onderbreking tussen fases" : ""
+    f.verplichteWacht ? "Onderbreking tussen fases noodzakelijk" : ""
   ].filter(Boolean);
-}
-
-// ================= RISICO =================
-function risico(f){
-  let r=[];
-  if(f.afhankelijk) r.push("Vertraging mogelijk door afhankelijkheid");
-  if(f.geenParallel) r.push("Geen parallel werk → kritische planning");
-  if(f.verplichteWacht) r.push("Onderbreking → extra kosten");
-  return r.length ? r : ["Geen bijzonderheden"];
 }
 
 // ================= DATA =================
@@ -95,6 +99,7 @@ function analyse(){
 
   ];
 
+  // afhankelijkheden
   fasesGlobaal.forEach((f,i)=>{
     if(f.afhankelijk){
       f.start = fasesGlobaal[f.afhankelijk-1].eind;
@@ -104,20 +109,33 @@ function analyse(){
     }
   });
 
+  // OUTPUT
   fasesGlobaal.forEach(f=>{
-    const div = document.createElement("div");
+
+    const div=document.createElement("div");
     div.className="plan";
 
-    div.innerHTML = `
-    <strong>${f.naam}: ${f.plan}</strong><br>
-    Periode: ${f.start?.toLocaleDateString()} → ${f.eind?.toLocaleDateString()}
+    div.innerHTML=`
+    <strong>${f.naam}: ${f.plan}</strong>
+
+    <p><b>Periode:</b> ${f.start?.toLocaleDateString()} → ${f.eind?.toLocaleDateString()}</p>
+
+    <b>Samenvatting:</b>
+    <ul>
+    ${samenvatting(f).map(s=>`<li>${s}</li>`).join("")}
+    </ul>
+
+    <b>Risico's:</b>
+    <ul>
+    ${risico(f).map(r=>`<li>${r}</li>`).join("")}
+    </ul>
     `;
 
     out.appendChild(div);
   });
 }
 
-// ================= PDF EXPORT (PRO) =================
+// ================= PDF EXPORT =================
 function exportPDF(){
 
   const { jsPDF } = window.jspdf;
@@ -125,57 +143,50 @@ function exportPDF(){
 
   let y = 15;
 
-  // TITEL
   doc.setFontSize(16);
   doc.text("LV Analyse Rapport", 10, y);
   y += 10;
 
-  fasesGlobaal.forEach((f,i)=>{
+  fasesGlobaal.forEach(f=>{
 
     if(y > 270){
       doc.addPage();
       y = 15;
     }
 
-    // FASE TITEL
     doc.setFontSize(12);
     doc.text(`${f.naam} - ${f.plan}`, 10, y);
     y += 6;
 
-    // PERIODE
     doc.setFontSize(10);
-    doc.text(`Periode: ${f.start?.toLocaleDateString()} - ${f.eind?.toLocaleDateString()}`, 10, y);
+    doc.text(`Periode: ${f.start?.toLocaleDateString()} → ${f.eind?.toLocaleDateString()}`, 10, y);
     y += 6;
 
-    // SAMENVATTING
-    doc.text("Werkzaamheden:", 10, y);
+    doc.text("Samenvatting:", 10, y);
     y += 5;
 
-    const sam = maakSamenvatting(f);
-    sam.forEach(s=>{
-      const lines = doc.splitTextToSize("- " + s, 180);
+    samenvatting(f).forEach(s=>{
+      const lines = doc.splitTextToSize("• " + s, 180);
       doc.text(lines, 10, y);
       y += lines.length * 5;
     });
 
-    y += 3;
+    y += 4;
 
-    // RISICO
     doc.text("Risico's:", 10, y);
     y += 5;
 
-    const r = risico(f);
-    r.forEach(s=>{
-      const lines = doc.splitTextToSize("- " + s, 180);
+    risico(f).forEach(r=>{
+      const lines = doc.splitTextToSize("• " + r, 180);
       doc.text(lines, 10, y);
       y += lines.length * 5;
     });
 
-    y += 8;
+    y += 10;
 
   });
 
-  doc.save("LV_Analyse_Rapport.pdf");
+  doc.save("LV_Analyse_Pro.pdf");
 }
 
 </script>
