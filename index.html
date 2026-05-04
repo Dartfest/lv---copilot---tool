@@ -4,13 +4,14 @@
 <meta charset="UTF-8">
 <title>LV – Uitvoerderssamenvatting per Planstraße</title>
 
-<!-- ✅ PDF.js CORRECT -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.jsript>
+<!-- ✅ PDF.js CORRECT geladen -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.s
+<script>
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
-<!-- ✅ jsPDF CORRECT -->
+<!-- ✅ jsPDF CORRECT geladen -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
@@ -38,7 +39,7 @@ ul { margin-left:18px; }
   <h2>1. LV‑PDF(s)</h2>
   <input type="file" id="lvFiles" multiple accept=".pdf">
   <button onclick="readLV()">Lees LV</button>
-  <textarea id="lvText"></textarea>
+  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
 
 <div class="box">
@@ -49,26 +50,29 @@ ul { margin-left:18px; }
 </div>
 
 <script>
-/* ===== PDF lezen ===== */
+/* ================= PDF LEZEN ================= */
 async function readPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
   let text = "";
+
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
-    const c = await page.getTextContent();
-    text += c.items.map(i => i.str).join(" ") + "\n";
+    const content = await page.getTextContent();
+    text += content.items.map(i => i.str).join(" ") + "\n";
   }
   return text;
 }
 
 async function readLV() {
   let t = "";
-  for (const f of lvFiles.files) t += await readPDF(f);
+  for (const f of lvFiles.files) {
+    t += await readPDF(f);
+  }
   lvText.value = t;
 }
 
-/* ===== PLANSTRASSE BUNDELING (CORE) ===== */
+/* ================= PLANSTRASSE BUNDELING ================= */
 let planData = {};
 
 function analysePlanstrassen() {
@@ -76,6 +80,11 @@ function analysePlanstrassen() {
   output.innerHTML = "";
 
   const text = lvText.value;
+  if (!text.trim()) {
+    alert("LV is leeg – eerst LV lezen");
+    return;
+  }
+
   const regex = /Planstraße\s+([A-Z])/gi;
   let match;
 
@@ -99,7 +108,7 @@ function analysePlanstrassen() {
       planData[key].uitvoering.add("Zonder onderbreking uitvoeren");
 
     if (fragment.includes("frist") || fragment.includes("termin"))
-      planData[key].uitvoering.add("Vaste volgorde / termijn genoemd");
+      planData[key].uitvoering.add("Vaste termijn of volgorde benoemd");
 
     if (fragment.includes("abweich") || fragment.includes("mehr"))
       planData[key].risico.add("Afwijkingen / meerwerk mogelijk");
@@ -121,7 +130,7 @@ function analysePlanstrassen() {
     d.innerHTML = `
 <h3>${key}</h3>
 
-<strong>Uitvoering – samengevat</strong>
+<strong>Uitvoering – kernpunten</strong>
 <ul>
 ${[...planData[key].uitvoering].map(u=>`<li>${u}</li>`).join("") || "<li>Geen specifieke uitvoeringsvoorwaarden</li>"}
 </ul>
@@ -135,7 +144,7 @@ ${[...planData[key].risico].map(r=>`<li>${r}</li>`).join("") || "<li>Geen explic
   });
 }
 
-/* ===== UITVOERDERS PDF ===== */
+/* ================= UITVOERDERS PDF ================= */
 function exportUitvoerderPDF() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
@@ -155,7 +164,7 @@ Uitvoering:
 - ${[...data.uitvoering].join("\n- ") || "Geen specifieke voorwaarden"}
 
 Risico’s:
-- ${[...data.risico].join("\n- ") || "Geen expliciete risico’s"}
+- ${[...data.risiko].join("\n- ") || "Geen expliciete risico’s"}
 `;
     const block = pdf.splitTextToSize(tekst, 180);
     if (y + block.length * 5 > 280) {
@@ -172,3 +181,4 @@ Risico’s:
 
 </body>
 </html>
+``
