@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse PRO (Universeel)</title>
+<title>LV Analyse PRO+</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -12,15 +12,14 @@ body { font-family: Arial; padding:20px; background:#f4f6f8; }
 textarea { width:100%; height:200px; font-family:monospace; }
 button { padding:8px 14px; margin:6px; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
-.plan { background:#eef6ff; border-left:5px solid #2563eb; padding:12px; margin:10px 0; }
-.general { background:#fefce8; border-left:5px solid #eab308; padding:12px; }
+.report { background:#eef6ff; border-left:5px solid #2563eb; padding:15px; }
 .risk { color:#b91c1c; font-weight:bold; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse PRO</h1>
+<h1>LV Analyse PRO+</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
@@ -34,7 +33,7 @@ button { padding:8px 14px; margin:6px; }
 
 <script>
 
-// ================= PDF =================
+// ===== PDF LEZEN =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -52,131 +51,87 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ================= CLEAN =================
-function clean(t){
-  return t.replace(/\s+/g," ");
-}
-
-// ================= RISICO ENGINE =================
-function detectRisicos(text){
-  let r=[];
-
-  if(text.match(/ohne unterbrechung/i))
-    r.push("Continu werken vereist - hoge planningsdruk");
-
-  if(text.match(/nicht parallel/i))
-    r.push("Geen parallel werk mogelijk - kritische fasering");
-
-  if(text.match(/drittfirmen|versorgung/i))
-    r.push("Afhankelijk van derden (nutsbedrijven)");
-
-  if(text.match(/unterbrechung/i))
-    r.push("Mogelijke onderbrekingen - extra kosten");
-
-  if(text.match(/koordinierung/i))
-    r.push("Hoge coördinatie tussen partijen nodig");
-
-  return r.length ? r : ["Geen bijzondere risico's gevonden"];
-}
-
-// ================= WERKZAAMHEDEN =================
-function detectWerk(text){
-  let w=[];
-
-  if(text.match(/kanal/i)) w.push("Aanleg riolering");
-  if(text.match(/kabel|leitung/i)) w.push("Kabels en leidingen");
-  if(text.match(/straße/i)) w.push("Bouwwegen / infrastructuur");
-  if(text.match(/versorgung/i)) w.push("Nutsvoorzieningen");
-
-  return w.length ? w : ["Algemene civiele werkzaamheden"];
-}
-
-// ================= FASE DETECTIE =================
-function detectFases(text){
-
-  const regex = /(\d+)\.\s*bauabschnitt.*?planstraße\s+([a-z])/gi;
-
-  let fases=[];
-  let m;
-
-  while((m=regex.exec(text))){
-    fases.push({
-      naam: "Fase " + m[1],
-      plan: "Planstraße " + m[2].toUpperCase()
-    });
-  }
-
-  return fases;
-}
-
-// ================= ANALYSE =================
+// ===== ANALYSE ENGINE =====
 let analyseData = {};
 
 function analyse(){
 
-  let text = clean(document.getElementById("lvText").value.toLowerCase());
+  const text = document.getElementById("lvText").value.toLowerCase();
   const out = document.getElementById("result");
   out.innerHTML="";
 
-  const fases = detectFases(text);
+  // ===== DETECTIES =====
+  const afhankelijk = text.match(/drittfirmen|versorgung|koord|abstimmung/gi);
+  const geenParallel = text.match(/nicht parallel/gi);
+  const onderbreking = text.match(/unterbrechung/gi);
+  const strakkePlanning = text.match(/ohne unterbrechung|zeitvorgaben/gi);
 
-  analyseData = {
-    fases: fases,
-    werk: detectWerk(text),
-    risico: detectRisicos(text)
-  };
+  // ===== SAMENVATTING =====
+  let samenvatting = `
+  Dit project betreft civieltechnische werkzaamheden waaronder riolering, kabels en leidingen en de aanleg van bouwwegen. 
+  De uitvoering is gefaseerd en kent duidelijke afhankelijkheden tussen werkzaamheden en betrokken partijen.
+  `;
 
-  // ===== MET FASES =====
-  if(fases.length > 0){
-
-    fases.forEach(f=>{
-      const div=document.createElement("div");
-      div.className="plan";
-
-      div.innerHTML=`
-      <strong>${f.naam}: ${f.plan}</strong><br><br>
-
-      <b>Werkzaamheden:</b>
-      <ul>${analyseData.werk.map(w=>`<li>${w}</li>`).join("")}</ul>
-
-      <b>Risico's:</b>
-      <ul class="risk">${analyseData.risico.map(r=>`<li>${r}</li>`).join("")}</ul>
-      `;
-
-      out.appendChild(div);
-    });
-
+  if(strakkePlanning){
+    samenvatting += `
+    De planning is strak opgezet waarbij werkzaamheden zonder onderbreking moeten worden uitgevoerd.`;
   }
 
-  // ===== ZONDER FASES (BELANGRIJK!) =====
-  else{
-
-    const div=document.createElement("div");
-    div.className="general";
-
-    div.innerHTML=`
-    <strong>Algemene LV Analyse</strong><br><br>
-
-    <b>Werkzaamheden:</b>
-    <ul>${analyseData.werk.map(w=>`<li>${w}</li>`).join("")}</ul>
-
-    <b>Risico's uitvoering:</b>
-    <ul class="risk">${analyseData.risico.map(r=>`<li>${r}</li>`).join("")}</ul>
-
-    <b>Analyse:</b><br>
-    De werkzaamheden vereisen afstemming tussen meerdere partijen en een strakke planning.
-    Let op afhankelijkheden, mogelijke onderbrekingen en beperkte parallelle uitvoering.
-    `;
-
-    out.appendChild(div);
+  if(afhankelijk){
+    samenvatting += `
+    Er is sprake van afhankelijkheid van derden zoals nutsbedrijven, wat invloed heeft op de voortgang.`;
   }
 
+  if(geenParallel){
+    samenvatting += `
+    Parallel werken tussen fases is niet toegestaan, waardoor de doorlooptijd kritisch wordt.`;
+  }
+
+  if(onderbreking){
+    samenvatting += `
+    Mogelijke onderbrekingen tussen fases moeten worden ingecalculeerd en worden niet extra vergoed.`;
+  }
+
+  // ===== RISICO =====
+  let risico = [];
+
+  if(strakkePlanning)
+    risico.push("Strakke planning zonder uitloopmogelijkheden");
+
+  if(afhankelijk)
+    risico.push("Afhankelijkheid van derden (nutsbedrijven)");
+
+  if(geenParallel)
+    risico.push("Geen parallel werk mogelijk - verhoogde doorlooptijd");
+
+  if(onderbreking)
+    risico.push("Onderbrekingen leiden tot extra kosten en inefficiëntie");
+
+  if(risico.length === 0)
+    risico.push("Algemeen uitvoeringsrisico - afstemming en planning essentieel");
+
+  analyseData = { samenvatting, risico };
+
+  // ===== OUTPUT =====
+  out.innerHTML = `
+  <div class="report">
+
+  <h3>Samenvatting LV</h3>
+  <p>${samenvatting}</p>
+
+  <h3>Belangrijkste risico's</h3>
+  <ul class="risk">
+  ${risico.map(r=>`<li>${r}</li>`).join("")}
+  </ul>
+
+  </div>
+  `;
 }
 
-// ================= PDF =================
+// ===== PDF =====
 function exportPDF(){
 
-  if(!analyseData.werk){
+  if(!analyseData.samenvatting){
     alert("Eerst analyseren");
     return;
   }
@@ -190,63 +145,25 @@ function exportPDF(){
   doc.text("LV Analyse Rapport",10,y);
   y+=10;
 
-  // ===== FASES =====
-  if(analyseData.fases.length>0){
+  doc.setFontSize(12);
+  doc.text("Samenvatting",10,y);
+  y+=6;
 
-    analyseData.fases.forEach(f=>{
+  doc.setFontSize(10);
+  const sam = doc.splitTextToSize(analyseData.samenvatting,180);
+  doc.text(sam,10,y);
+  y += sam.length*5 + 5;
 
-      if(y>260){ doc.addPage(); y=15; }
+  doc.setTextColor(200,0,0);
+  doc.setFontSize(12);
+  doc.text("Risico's",10,y);
+  y+=6;
 
-      doc.setFontSize(12);
-      doc.text(`${f.naam} - ${f.plan}`,10,y); y+=6;
-
-      doc.setFontSize(10);
-      doc.text("Werkzaamheden:",10,y); y+=5;
-
-      analyseData.werk.forEach(w=>{
-        doc.text("- "+w,10,y); y+=5;
-      });
-
-      y+=3;
-
-      doc.setTextColor(200,0,0);
-      doc.text("Risico's:",10,y); y+=5;
-
-      analyseData.risico.forEach(r=>{
-        doc.text("- "+r,10,y); y+=5;
-      });
-
-      doc.setTextColor(0,0,0);
-      y+=10;
-
-    });
-
-  }
-
-  // ===== ALGEMEEN =====
-  else{
-
-    doc.setFontSize(12);
-    doc.text("Algemene LV Analyse",10,y); y+=8;
-
-    doc.setFontSize(10);
-    doc.text("Werkzaamheden:",10,y); y+=5;
-
-    analyseData.werk.forEach(w=>{
-      doc.text("- "+w,10,y); y+=5;
-    });
-
-    y+=3;
-
-    doc.setTextColor(200,0,0);
-    doc.text("Risico's:",10,y); y+=5;
-
-    analyseData.risico.forEach(r=>{
-      doc.text("- "+r,10,y); y+=5;
-    });
-
-    doc.setTextColor(0,0,0);
-  }
+  doc.setFontSize(10);
+  analyseData.risico.forEach(r=>{
+    doc.text("- "+r,10,y);
+    y+=5;
+  });
 
   doc.save("LV_Analyse_Pro.pdf");
 }
