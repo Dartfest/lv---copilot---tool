@@ -2,25 +2,27 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse (Chunk AI)</title>
+<title>LV Analyse (No API AI Tool)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:160px; margin-bottom:10px; }
-button { padding:8px 14px; margin:5px 0; }
+textarea { width:100%; height:140px; margin-bottom:10px; }
+button { padding:6px 10px; margin:4px; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
+.chunk { border:1px solid #ddd; padding:10px; margin-bottom:10px; }
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse (Slim opdelen)</h1>
+<h1>LV Analyse Tool (Zonder API)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
+<button onclick="openChatGPT()">Open ChatGPT</button>
 <textarea id="lvText"></textarea>
 </div>
 
@@ -30,12 +32,18 @@ button { padding:8px 14px; margin:5px 0; }
 </div>
 
 <div class="box">
-<h3>Eindprompt</h3>
-<button onclick="eindPrompt()">Genereer eindanalyse</button>
+<h3>Eindanalyse prompt</h3>
+<button onclick="genFinal()">Genereer</button>
+<button onclick="copyFinal()">Kopieer</button>
 <textarea id="finalPrompt"></textarea>
 </div>
 
 <script>
+
+// ===== OPEN CHATGPT =====
+function openChatGPT(){
+  window.open("https://chat.openai.com", "_blank");
+}
 
 // ===== PDF =====
 async function leesLV(){
@@ -61,49 +69,76 @@ let parts=[];
 function splitLV(){
 
   const text = document.getElementById("lvText").value;
-  const max = 3000; // veilige chunk grootte
+  const size = 2500;
 
   parts = [];
-  for(let i=0;i<text.length;i+=max){
-    parts.push(text.substring(i,i+max));
+  for(let i=0;i<text.length;i+=size){
+    parts.push(text.substring(i,i+size));
   }
 
   const div = document.getElementById("chunks");
   div.innerHTML="";
 
   parts.forEach((p,i)=>{
-    div.innerHTML += `
-    <div>
-      <b>Deel ${i+1}</b>
-      <textarea>
-Analyseer dit deel van een LV:
+
+    const prompt = `
+Analyseer dit deel van een LV als werkvoorbereider:
+
 - samenvatting
 - werkzaamheden
 - planning
 - risico's
 
 ${p}
-      </textarea>
+    `;
+
+    div.innerHTML += `
+    <div class="chunk">
+      <b>Deel ${i+1}</b><br>
+      <button onclick="copyText(${i})">Kopieer</button>
+      <textarea id="chunk${i}">${prompt}</textarea>
     </div>`;
   });
 }
 
-// ===== EINDPROMPT =====
-function eindPrompt(){
+// ===== COPY =====
+function copyText(i){
+  const t = document.getElementById("chunk"+i);
+  t.select();
+  document.execCommand("copy");
+  alert("Gekopieerd!");
+}
+
+// ===== FINAL PROMPT =====
+function genFinal(){
 
   const prompt = `
-Gebruik onderstaande deelanalyses en maak één complete LV analyse:
+Maak een volledige LV analyse op basis van onderstaande deelanalyses.
 
-- uitgebreide samenvatting
-- fasering
-- planning totaal
-- contractanalyse
-- risico's per categorie
+Structuur:
 
-Plak hier alle antwoorden van ChatGPT onder elkaar.
+1. Uitgebreide samenvatting
+2. Scope werkzaamheden
+3. Fasering
+4. Planning totaal
+5. Contractanalyse
+6. Risico's:
+   - planning
+   - contract
+   - uitvoering
+   - omgeving
+
+Plak hieronder alle deelanalyses:
 `;
 
   document.getElementById("finalPrompt").value = prompt;
+}
+
+function copyFinal(){
+  const t = document.getElementById("finalPrompt");
+  t.select();
+  document.execCommand("copy");
+  alert("Eindprompt gekopieerd!");
 }
 
 </script>
