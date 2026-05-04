@@ -2,35 +2,42 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse (Hybride AI Engine)</title>
+<title>LV Analyse PRO Tool</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:180px; margin-bottom:10px; }
+textarea { width:100%; height:160px; }
 button { padding:8px 14px; margin:6px; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
+
 .section { background:#fff; border-left:5px solid #2563eb; padding:15px; margin:10px 0; }
-.risk { color:#b91c1c; font-weight:bold; }
-.fact { color:#111; }
+
+.risk-high { color:#b91c1c; font-weight:bold; }
+.risk-mid { color:#f59e0b; font-weight:bold; }
+.risk-low { color:#15803d; font-weight:bold; }
+
+.gantt { margin-top:10px; }
+.bar {
+  height:20px;
+  background:#2563eb;
+  margin:6px 0;
+  border-radius:4px;
+}
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse (Hybride AI + Regelengine)</h1>
+<h1>LV Analyse PRO (Hybride Tool)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
 <button onclick="analyse()">Analyse</button>
 <button onclick="exportPDF()">Export PDF</button>
-
-<br><br>
-<label><input type="checkbox" id="useAI"> Gebruik AI (optioneel)</label>
-
 <textarea id="lvText"></textarea>
 </div>
 
@@ -56,102 +63,112 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== REGELENGINE =====
-function regelAnalyse(text){
+// ===== ANALYSE =====
+let analyseData = {};
 
-  const t = text.toLowerCase();
-  const has = (w) => t.includes(w);
+function analyse(){
 
-  let feiten = [];
-  let risico = [];
+  const text = document.getElementById("lvText").value.toLowerCase();
 
-  // feiten
-  if(has("bauabschnitt"))
-    feiten.push("Fasering aanwezig (Bauabschnitt).");
+  const has = (w) => text.includes(w);
 
-  if(has("nicht parallel")){
-    feiten.push("Parallel werken niet toegestaan.");
-    risico.push("Geen parallel werk → langere doorlooptijd.");
+  // ===== FASERING =====
+  let fases = [];
+  let match;
+  const regex = /(\d+)\.\s*bauabschnitt/gi;
+
+  while((match = regex.exec(text))){
+    fases.push("Fase " + match[1]);
   }
 
-  if(has("ohne unterbrechung")){
-    feiten.push("Werk zonder onderbreking uitvoeren.");
-    risico.push("Continue uitvoering vereist strakke planning.");
+  if(fases.length === 0) fases = ["Projectfase"];
+
+  // ===== RISICO =====
+  let score = 0;
+  let risicoLijst = [];
+
+  if(has("nicht parallel")){
+    score += 2;
+    risicoLijst.push("Geen parallel werk mogelijk");
   }
 
   if(has("nicht vergütet")){
-    feiten.push("Kosten worden niet apart vergoed.");
-    risico.push("Kostenrisico ligt bij aannemer.");
+    score += 2;
+    risicoLijst.push("Kosten worden niet vergoed");
   }
 
   if(has("drittfirmen")){
-    feiten.push("Afhankelijkheid van derden.");
-    risico.push("Vertraging door derden mogelijk.");
+    score += 2;
+    risicoLijst.push("Afhankelijk van derden");
   }
 
-  if(has("abstimmung")){
-    feiten.push("Afstemming met partijen vereist.");
+  if(has("ohne unterbrechung")){
+    score += 1;
+    risicoLijst.push("Continue uitvoering vereist");
   }
 
-  return { feiten, risico };
-}
+  let risiconiveau = "Laag";
+  let css = "risk-low";
 
-// ===== AI (OPTIONEEL) =====
-async function aiAnalyse(text){
-
-  // 👉 placeholder (nu niet actief zonder API)
-  return null;
-}
-
-// ===== HYBRIDE =====
-let analyseData = {};
-
-async function analyse(){
-
-  const text = document.getElementById("lvText").value;
-  const useAI = document.getElementById("useAI").checked;
-
-  const regel = regelAnalyse(text);
-  let ai = null;
-
-  if(useAI){
-    ai = await aiAnalyse(text);
+  if(score >= 5){
+    risiconiveau = "Hoog";
+    css = "risk-high";
+  } else if(score >= 3){
+    risiconiveau = "Middel";
+    css = "risk-mid";
   }
 
-  // ===== COMBINEREN =====
-  let samenvatting = "";
+  // ===== ACTIEPUNTEN =====
+  let acties = [];
 
-  if(ai){
-    samenvatting = ai;
-  } else {
-    samenvatting = regel.feiten.join(" ");
-  }
+  if(has("nicht parallel"))
+    acties.push("Planning lineair opbouwen (geen overlap)");
 
-  analyseData = {
-    samenvatting,
-    feiten: regel.feiten,
-    risico: regel.risico
-  };
+  if(has("drittfirmen"))
+    acties.push("Afstemming met nutsbedrijven organiseren");
+
+  if(has("nicht vergütet"))
+    acties.push("Kosten en risico’s vooraf incalculeren");
+
+  if(has("ohne unterbrechung"))
+    acties.push("Continuïteit personeel en materieel waarborgen");
+
+  if(acties.length === 0)
+    acties.push("Standaard projectbewaking uitvoeren");
+
+  // ===== GANTT =====
+  let ganttHTML = "";
+  fases.forEach((f,i)=>{
+    const width = 30 + (i*15);
+    ganttHTML += `<div>${f}<div class="bar" style="width:${width}%"></div></div>`;
+  });
+
+  analyseData = { risiconiveau, acties, risicoLijst };
 
   // ===== OUTPUT =====
   document.getElementById("result").innerHTML = `
   <div class="section">
-    <h3>Samenvatting</h3>
-    <p>${samenvatting}</p>
-  </div>
-
-  <div class="section">
-    <h3>Feiten (bron LV)</h3>
-    <ul class="fact">
-    ${regel.feiten.map(f=>`<li>${f}</li>`).join("")}
-    </ul>
+    <h3>Risicoscore</h3>
+    <p class="${css}">${risiconiveau}</p>
   </div>
 
   <div class="section">
     <h3>Risico's</h3>
-    <ul class="risk">
-    ${regel.risico.map(r=>`<li>${r}</li>`).join("")}
+    <ul class="${css}">
+    ${risicoLijst.map(r=>`<li>${r}</li>`).join("")}
     </ul>
+  </div>
+
+  <div class="section">
+    <h3>Actiepunten</h3>
+    <ul>
+    ${acties.map(a=>`<li>${a}</li>`).join("")}
+    </ul>
+  </div>
+
+  <div class="section">
+    <h3>Planning (Gantt indicatief)</h3>
+    <div class="gantt">${ganttHTML}</div>
   </div>
   `;
 }
@@ -162,22 +179,24 @@ function exportPDF(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
-  let y=15;
+  let y=20;
 
-  doc.text("Samenvatting:",10,y); y+=5;
-  const lines = doc.splitTextToSize(analyseData.samenvatting,180);
-  doc.text(lines,10,y);
-  y += lines.length*5 + 10;
+  doc.text("Risicoscore: " + analyseData.risiconiveau,10,y);
+  y+=10;
 
-  doc.text("Risico's:",10,y); y+=5;
-  doc.setTextColor(200,0,0);
-
-  analyseData.risico.forEach(r=>{
+  analyseData.risicoLijst.forEach(r=>{
     doc.text("- "+r,10,y);
     y+=5;
   });
 
-  doc.save("LV_Analyse_Hybride.pdf");
+  y+=10;
+
+  analyseData.acties.forEach(a=>{
+    doc.text("* "+a,10,y);
+    y+=5;
+  });
+
+  doc.save("LV_Analyse_PRO.pdf");
 }
 
 </script>
