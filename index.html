@@ -2,42 +2,40 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse PRO Tool</title>
+<title>LV Planning Engine</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
-textarea { width:100%; height:160px; }
+textarea { width:100%; height:180px; }
 button { padding:8px 14px; margin:6px; }
 .box { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; }
 
-.section { background:#fff; border-left:5px solid #2563eb; padding:15px; margin:10px 0; }
-
-.risk-high { color:#b91c1c; font-weight:bold; }
-.risk-mid { color:#f59e0b; font-weight:bold; }
-.risk-low { color:#15803d; font-weight:bold; }
-
-.gantt { margin-top:10px; }
+.gantt { margin-top:20px; }
+.row { margin:8px 0; }
 .bar {
   height:20px;
   background:#2563eb;
-  margin:6px 0;
+  display:inline-block;
   border-radius:4px;
 }
+.critical {
+  background:#b91c1c;
+}
+.label { display:inline-block; width:220px; }
+
 </style>
 </head>
 
 <body>
 
-<h1>LV Analyse PRO (Hybride Tool)</h1>
+<h1>LV Planning Engine (Datum + Kritieke Pad)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
-<button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
+<button onclick="analyse()">Analyse Planning</button>
 <textarea id="lvText"></textarea>
 </div>
 
@@ -63,140 +61,95 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ===== ANALYSE =====
-let analyseData = {};
+// ===== DATUM PARSE =====
+const maandMap = {
+  januar:0,februar:1,märz:2,april:3,mai:4,juni:5,
+  juli:6,august:7,september:8,oktober:9,november:10,dezember:11
+};
 
+function parseMaand(match){
+  return new Date(match[2], maandMap[match[1]], 1);
+}
+
+// ===== ANALYSE =====
 function analyse(){
 
   const text = document.getElementById("lvText").value.toLowerCase();
 
-  const has = (w) => text.includes(w);
-
-  // ===== FASERING =====
+  // ===== FASES =====
   let fases = [];
-  let match;
-  const regex = /(\d+)\.\s*bauabschnitt/gi;
+  let regex = /(\d+)\.\s*bauabschnitt/gi;
+  let m;
 
-  while((match = regex.exec(text))){
-    fases.push("Fase " + match[1]);
+  while((m = regex.exec(text))){
+    fases.push({
+      naam: "Fase " + m[1],
+      start:null,
+      end:null
+    });
   }
 
-  if(fases.length === 0) fases = ["Projectfase"];
-
-  // ===== RISICO =====
-  let score = 0;
-  let risicoLijst = [];
-
-  if(has("nicht parallel")){
-    score += 2;
-    risicoLijst.push("Geen parallel werk mogelijk");
+  if(fases.length === 0){
+    fases.push({naam:"Project", start:null, end:null});
   }
 
-  if(has("nicht vergütet")){
-    score += 2;
-    risicoLijst.push("Kosten worden niet vergoed");
+  // ===== DATUMS =====
+  let maandRegex = /(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(20\d{2})/gi;
+  let dates = [];
+  let d;
+
+  while((d = maandRegex.exec(text))){
+    dates.push(parseMaand(d));
   }
 
-  if(has("drittfirmen")){
-    score += 2;
-    risicoLijst.push("Afhankelijk van derden");
-  }
+  dates.sort((a,b)=>a-b);
 
-  if(has("ohne unterbrechung")){
-    score += 1;
-    risicoLijst.push("Continue uitvoering vereist");
-  }
-
-  let risiconiveau = "Laag";
-  let css = "risk-low";
-
-  if(score >= 5){
-    risiconiveau = "Hoog";
-    css = "risk-high";
-  } else if(score >= 3){
-    risiconiveau = "Middel";
-    css = "risk-mid";
-  }
-
-  // ===== ACTIEPUNTEN =====
-  let acties = [];
-
-  if(has("nicht parallel"))
-    acties.push("Planning lineair opbouwen (geen overlap)");
-
-  if(has("drittfirmen"))
-    acties.push("Afstemming met nutsbedrijven organiseren");
-
-  if(has("nicht vergütet"))
-    acties.push("Kosten en risico’s vooraf incalculeren");
-
-  if(has("ohne unterbrechung"))
-    acties.push("Continuïteit personeel en materieel waarborgen");
-
-  if(acties.length === 0)
-    acties.push("Standaard projectbewaking uitvoeren");
-
-  // ===== GANTT =====
-  let ganttHTML = "";
+  // ===== VERDELEN OVER FASES =====
   fases.forEach((f,i)=>{
-    const width = 30 + (i*15);
-    ganttHTML += `<div>${f}<div class="bar" style="width:${width}%"></div></div>`;
+    f.start = dates[i] || null;
+    f.end = dates[i+1] || null;
   });
 
-  analyseData = { risiconiveau, acties, risicoLijst };
+  // ===== MIN/MAX =====
+  const validDates = dates.filter(d=>d);
+  const minDate = validDates[0];
+  const maxDate = validDates[validDates.length-1];
+
+  const totalDays = (maxDate - minDate) / (1000*60*60*24);
+
+  // ===== CRITICAL PATH =====
+  const sequential = text.includes("nicht parallel");
+
+  // ===== GANTT =====
+  let html = "<div class='gantt'>";
+
+  fases.forEach(f=>{
+
+    if(!f.start || !f.end) return;
+
+    const startOffset = (f.start - minDate) / (1000*60*60*24);
+    const duration = (f.end - f.start) / (1000*60*60*24);
+
+    const left = (startOffset / totalDays) * 100;
+    const width = (duration / totalDays) * 100;
+
+    html += `
+    <div class="row">
+      <span class="label">${f.naam}</span>
+      <div class="bar ${sequential ? 'critical' : ''}"
+           style="margin-left:${left}%; width:${width}%"></div>
+    </div>
+    `;
+  });
+
+  html += "</div>";
 
   // ===== OUTPUT =====
   document.getElementById("result").innerHTML = `
-  <div class="section">
-    <h3>Risicoscore</h3>
-    <p class="${css}">${risiconiveau}</p>
-  </div>
-
-  <div class="section">
-    <h3>Risico's</h3>
-    <ul class="${css}">
-    ${risicoLijst.map(r=>`<li>${r}</li>`).join("")}
-    </ul>
-  </div>
-
-  <div class="section">
-    <h3>Actiepunten</h3>
-    <ul>
-    ${acties.map(a=>`<li>${a}</li>`).join("")}
-    </ul>
-  </div>
-
-  <div class="section">
-    <h3>Planning (Gantt indicatief)</h3>
-    <div class="gantt">${ganttHTML}</div>
-  </div>
+  <h3>Planning (Gantt)</h3>
+  ${html}
+  <p><b>Kritieke pad:</b> ${sequential ? "Ja (lineair project)" : "Onbekend / parallel mogelijk"}</p>
   `;
-}
-
-// ===== PDF =====
-function exportPDF(){
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  let y=20;
-
-  doc.text("Risicoscore: " + analyseData.risiconiveau,10,y);
-  y+=10;
-
-  analyseData.risicoLijst.forEach(r=>{
-    doc.text("- "+r,10,y);
-    y+=5;
-  });
-
-  y+=10;
-
-  analyseData.acties.forEach(a=>{
-    doc.text("* "+a,10,y);
-    y+=5;
-  });
-
-  doc.save("LV_Analyse_PRO.pdf");
 }
 
 </script>
