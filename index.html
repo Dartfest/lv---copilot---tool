@@ -259,15 +259,22 @@ async function analyse(){
 
     out.appendChild(div);
 
-    // AI vertaling per regel
-    const vertalingen = await Promise.all(
-      d.sam.map(async s=>{
-        const v = await vertaalAI(s);
-        return `<li>${s}<br><span class="muted">→ ${v}</span></li>`;
-      })
-    );
+    // 🔥 Samenvatting direct + AI vertaling eronder
+    const lijst = div.querySelector(".werk");
 
-    div.querySelector(".werk").innerHTML = vertalingen.join("");
+    for(const s of d.sam){
+
+      const li = document.createElement("li");
+      li.innerHTML = `${s}<br><span class="muted">→ vertalen...</span>`;
+      lijst.appendChild(li);
+
+      try{
+        const v = await vertaalAI(s);
+        li.innerHTML = `${s}<br><span class="muted">→ ${v}</span>`;
+      }catch(e){
+        li.innerHTML = `${s}<br><span class="muted">→ (vertaling mislukt)</span>`;
+      }
+    }
   }
 
 }
