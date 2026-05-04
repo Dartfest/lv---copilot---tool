@@ -2,10 +2,9 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Analyse PRO</title>
+<title>LV Analyse Generator</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial; padding:20px; background:#f4f6f8; }
@@ -19,13 +18,12 @@ button { padding:8px 14px; margin:6px; }
 
 <body>
 
-<h1>LV Analyse (PRO)</h1>
+<h1>LV Analyse (Automatisch)</h1>
 
 <div class="box">
 <input type="file" id="file" accept=".pdf">
 <button onclick="leesLV()">Lees PDF</button>
 <button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
 <textarea id="lvText"></textarea>
 </div>
 
@@ -33,7 +31,7 @@ button { padding:8px 14px; margin:6px; }
 
 <script>
 
-// ================= PDF =================
+// ===== PDF =====
 async function leesLV(){
   const f = document.getElementById("file").files[0];
   if(!f) return alert("Kies PDF");
@@ -51,84 +49,90 @@ async function leesLV(){
   document.getElementById("lvText").value = text;
 }
 
-// ================= SAMENVATTING =================
-function samenvatting(f){
-  return [
-    "Aanleg riolering en drainage",
-    "Aanbrengen kabels en leidingen",
-    "Realisatie bouwwegen",
-    "Afstemming met nutsbedrijven",
-    f.afhankelijk ? "Start afhankelijk van vorige fase" : "",
-    f.verplichteWacht ? "Onderbreking tussen fases noodzakelijk" : ""
-  ].filter(Boolean);
+// ===== CLEAN =====
+function clean(t){
+  return t.replace(/([A-Za-z])\s([A-Za-z])/g, "$1$2").replace(/\s+/g," ");
 }
 
-// ================= RISICO =================
+// ===== MAAND =====
+const maanden = {
+  "januar":0,"februar":1,"märz":2,"april":3,"mai":4,
+  "juni":5,"juli":6,"august":7,"september":8,
+  "oktober":9,"november":10,"dezember":11
+};
+
+// ===== DATUM PARSER =====
+function parseMaand(str){
+  const m = str.match(/(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\s+(\d{4})/i);
+  if(!m) return null;
+  return new Date(parseInt(m[2]), maanden[m[1].toLowerCase()], 1);
+}
+
+// ===== SAMENVATTING =====
+function samenvatting(){
+  return [
+    "Aanleg riolering",
+    "Aanbrengen kabels en leidingen",
+    "Realisatie bouwwegen",
+    "Afstemming met nutsbedrijven"
+  ];
+}
+
+// ===== RISICO =====
 function risico(f){
   let r=[];
   if(f.afhankelijk) r.push("Afhankelijk van vorige fase - kans op vertraging");
-  if(f.geenParallel) r.push("Geen parallel werk mogelijk - kritische planning");
-  if(f.verplichteWacht) r.push("Onderbreking - extra kosten en stilstand");
+  if(f.geenParallel) r.push("Geen parallel werk mogelijk");
   return r.length ? r : ["Geen bijzonderheden"];
 }
 
-// ================= DATA =================
-let fasesGlobaal = [];
-
-// ================= ANALYSE =================
+// ===== ANALYSE =====
 function analyse(){
 
+  let text = clean(document.getElementById("lvText").value);
   const out = document.getElementById("result");
   out.innerHTML="";
 
-  fasesGlobaal = [
+  const regex = /(\d+)\.\s*Bauabschnitt.*?Planstraße\s+([A-Z])/gi;
 
-    {
-      naam:"1. Bauabschnitt",
-      plan:"Planstraße C",
-      start:new Date(2026,5,1),
-      eind:new Date(2027,6,31),
-      geenParallel:true
-    },
+  let fases=[];
+  let m;
 
-    {
-      naam:"2. Bauabschnitt",
-      plan:"Planstraße E",
-      start:new Date(2027,7,1), // NA fase 1
-      eind:new Date(2027,8,15), // realistische duur toegevoegd
-      afhankelijk:1,
-      geenParallel:true
-    },
+  while((m=regex.exec(text))){
+    fases.push({
+      nr: parseInt(m[1]),
+      naam: "Bauabschnitt " + m[1],
+      plan: "Planstraße " + m[2],
+      start:null,
+      eind:null
+    });
+  }
 
-    {
-      naam:"3. Bauabschnitt",
-      plan:"Planstraße D - Teil 1",
-      start:new Date(2027,7,1),
-      eind:new Date(2028,3,30),
-      verplichteWacht:true,
-      geenParallel:true
-    },
+  // ===== DATUM DETECTIE =====
+  fases.forEach(f=>{
 
-    {
-      naam:"4. Bauabschnitt",
-      plan:"Planstraße D - Teil 2",
-      start:new Date(2028,4,1),
-      eind:new Date(2028,4,31),
-      afhankelijk:3,
-      geenParallel:true
-    }
+    const idx = text.indexOf(f.plan);
+    const frag = text.slice(idx, idx+500);
 
-  ];
+    const start = frag.match(/im\s+[a-zä]+\s+\d{4}/i);
+    const eind = frag.match(/bis\s+[a-zä]+\s+\d{4}/i);
 
-  // ===== veiligheidscheck (geen 0 dagen) =====
-  fasesGlobaal.forEach(f=>{
-    if(f.start && f.eind && f.start.getTime() === f.eind.getTime()){
-      f.eind = new Date(f.eind.getTime() + 1000*60*60*24*30);
+    if(start) f.start = parseMaand(start[0]);
+    if(eind) f.eind = parseMaand(eind[0]);
+  });
+
+  // ===== VOLGORDE =====
+  fases.sort((a,b)=>a.nr-b.nr);
+
+  fases.forEach((f,i)=>{
+    if(i>0 && !f.start){
+      f.start = fases[i-1].eind;
+      f.afhankelijk = true;
     }
   });
 
   // ===== OUTPUT =====
-  fasesGlobaal.forEach(f=>{
+  fases.forEach(f=>{
 
     const div=document.createElement("div");
     div.className="plan";
@@ -136,11 +140,13 @@ function analyse(){
     div.innerHTML=`
     <strong>${f.naam}: ${f.plan}</strong><br>
 
-    <b>Periode:</b> ${f.start.toLocaleDateString()} - ${f.eind.toLocaleDateString()}<br><br>
+    <b>Periode:</b> 
+    ${f.start ? f.start.toLocaleDateString() : "onbekend"} - 
+    ${f.eind ? f.eind.toLocaleDateString() : "onbekend"}<br><br>
 
     <b>Samenvatting:</b>
     <ul>
-    ${samenvatting(f).map(s=>`<li>${s}</li>`).join("")}
+    ${samenvatting().map(s=>`<li>${s}</li>`).join("")}
     </ul>
 
     <b>Risico's:</b>
@@ -151,72 +157,8 @@ function analyse(){
 
     out.appendChild(div);
   });
+
 }
-
-// ================= PDF EXPORT =================
-function exportPDF(){
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  let y = 15;
-
-  doc.setFontSize(16);
-  doc.text("LV Analyse Rapport", 10, y);
-  y += 10;
-
-  fasesGlobaal.forEach(f=>{
-
-    if(y > 260){
-      doc.addPage();
-      y = 15;
-    }
-
-    doc.setFontSize(12);
-    doc.setTextColor(0,0,0);
-    doc.text(`${f.naam} - ${f.plan}`, 10, y);
-    y += 6;
-
-    doc.setFontSize(10);
-    doc.text(
-      `Periode: ${f.start.toLocaleDateString()} - ${f.eind.toLocaleDateString()}`,
-      10,
-      y
-    );
-    y += 6;
-
-    // SAMENVATTING
-    doc.text("Werkzaamheden:", 10, y);
-    y += 5;
-
-    samenvatting(f).forEach(s=>{
-      const lines = doc.splitTextToSize("- " + s, 180);
-      doc.text(lines, 10, y);
-      y += lines.length * 5;
-    });
-
-    y += 3;
-
-    // RISICO ROOD
-    doc.setTextColor(200,0,0);
-    doc.text("Risico's:", 10, y);
-    y += 5;
-
-    risico(f).forEach(r=>{
-      const lines = doc.splitTextToSize("- " + r, 180);
-      doc.text(lines, 10, y);
-      y += lines.length * 5;
-    });
-
-    doc.setTextColor(0,0,0);
-
-    y += 10;
-
-  });
-
-  doc.save("LV_Analyse_Pro.pdf");
-}
-
 </script>
 
 </body>
