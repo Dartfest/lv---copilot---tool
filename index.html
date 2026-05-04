@@ -2,60 +2,54 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV + K&L Werkvoorbereiding Infra</title>
+<title>LV‑fasen → Uitvoerderssamenvatting</title>
 
-<!-- ✅ PDF.js -->
+<!-- PDF.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
 
-<!-- ✅ jsPDF -->
+<!-- jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Arial, sans-serif; background:#f4f6f8; padding:20px; }
 .box { background:#fff; padding:16px; border-radius:6px; margin-bottom:20px; }
-h1,h2,h3 { margin-top:0 }
-textarea { width:100%; min-height:150px; font-family:monospace; padding:10px; }
+textarea { width:100%; min-height:160px; font-family:monospace; padding:10px; }
 button { padding:6px 12px; margin:4px 6px 4px 0; }
-.chunk { padding:14px; border-radius:6px; margin-top:16px; }
-.green { background:#dcfce7; border-left:6px solid #16a34a; }
-.orange { background:#ffedd5; border-left:6px solid #ea580c; }
-.red { background:#fee2e2; border-left:6px solid #dc2626; }
+
+.phase { padding:14px; border-left:8px solid; border-radius:6px; margin-top:16px; }
+.phase1 { background:#f3e8ff; border-color:#9333ea; } /* paars */
+.phase2 { background:#e0f2fe; border-color:#0284c7; } /* blauw */
+.phase3 { background:#dcfce7; border-color:#16a34a; } /* groen */
+.phase4 { background:#ffedd5; border-color:#ea580c; } /* oranje */
+.phaseX { background:#f3f4f6; border-color:#6b7280; } /* grijs */
+
 ul { margin-left:18px; }
 </style>
 </head>
 
 <body>
 
-<h1>LV + K&L – Werkvoorbereiding Infra</h1>
+<h1>LV‑fasen → Uitvoerderssamenvatting</h1>
 
 <div class="box">
   <h2>1. LV‑PDF(s)</h2>
   <input type="file" id="lvFiles" multiple accept=".pdf">
   <button onclick="readLV()">Lees LV</button>
-  <textarea id="lvText"></textarea>
+  <textarea id="lvText" placeholder="LV‑tekst verschijnt hier..."></textarea>
 </div>
 
 <div class="box">
-  <h2>2. Kabels & Leidingen (PDF / TXT)</h2>
-  <input type="file" id="klFiles" multiple accept=".pdf,.txt">
-  <button onclick="readKL()">Lees K&amp;L</button>
-  <textarea id="klText"></textarea>
-</div>
-
-<div class="box">
-  <h2>3. Analyse</h2>
-  <button onclick="analyseLV()">Analyseer</button>
-  <button onclick="exportUitvoerderPDF()">PDF – Uitvoerderssamenvatting</button>
-  <button onclick="exportBestelPDF()">PDF – Bestellijst per fase</button>
+  <h2>2. Analyse per LV‑fase</h2>
+  <button onclick="analyseFasen()">Analyseer LV‑fasen</button>
+  <button onclick="exportUitvoerderPDF()">📄 PDF – Uitvoerderssamenvatting</button>
   <div id="output"></div>
 </div>
 
 <script>
-/* ===== PDF inlezen ===== */
 async function readPDF(file) {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -70,137 +64,92 @@ async function readPDF(file) {
 
 async function readLV() {
   let t="";
-  for (const f of lvFiles.files) t+=await readPDF(f);
-  lvText.value=t;
+  for (const f of lvFiles.files) t += await readPDF(f);
+  lvText.value = t;
 }
 
-async function readKL() {
-  let t="";
-  for (const f of klFiles.files) {
-    if (f.type==="application/pdf") t+=await readPDF(f);
-    else t+=await f.text();
-  }
-  klText.value=t.toLowerCase();
-}
+/* ===== LV-FASEN ANALYSE ===== */
+let faseData = [];
 
-/* ===== Analyse ===== */
-let uitvoerdersData = [];
-function analyseLV() {
-  uitvoerdersData = [];
-  output.innerHTML="";
-  const parts = lvText.value.match(/[\s\S]{1,3000}/g)||[];
-  const kl = klText.value;
+function analyseFasen() {
+  faseData = [];
+  output.innerHTML = "";
 
-  parts.forEach((p,i)=>{
-    const t=(p+kl).toLowerCase();
-    const netten=[];
-    if(t.includes("gas")) netten.push("Gas");
-    if(t.includes("elektra")) netten.push("Elektra");
-    if(t.includes("water")) netten.push("Water");
-    if(t.includes("telecom")||t.includes("glasvezel")) netten.push("Telecom");
-    if(t.includes("riool")) netten.push("Riool");
+  const text = lvText.value;
+  const chunks = text.split(/(Fase\s+\d+|Bauabschnitt\s+\w+|Abschnitt\s+\w+)/i);
 
-    let cls="green",impact="LAAG",fase="Normaal",meerwerk="Geen direct meerwerk";
-    let acties=[];
+  for (let i = 1; i < chunks.length; i += 2) {
+    const titel = chunks[i].trim();
+    const inhoud = chunks[i + 1] || "";
 
-    if(netten.includes("Gas")||netten.includes("Elektra")){
-      cls="red"; impact="HOOG"; fase="Handmatig / gefaseerd";
-      meerwerk="Meerwerk waarschijnlijk";
-      acties.push(
-        "Handmatig graven nabij netten",
-        "Gefaseerd uitvoeren",
-        "Extra toezicht / veiligheidsmaatregelen"
-      );
-    } else if(netten.length>1){
-      cls="orange"; impact="MIDDEL"; fase="Verlaagde productie";
-      meerwerk="Meerwerk mogelijk";
-      acties.push(
-        "Beperkte werkvakken",
-        "Aangepaste productiesnelheid"
-      );
-    }
+    const t = inhoud.toLowerCase();
+    const risico = [];
+    if (t.includes("abweich") || t.includes("meerwerk"))
+      risico.push("Afwijkingen / meerwerk genoemd");
+    if (t.includes("nach maßgabe") || t.includes("gemäß"))
+      risico.push("Uitvoering strikt volgens voorwaarden");
+    if (t.includes("optional") || t.includes("wenn erforderlich"))
+      risico.push("Onzeker scope‑element");
 
-    if(netten.length){
-      acties.push("Netbeheerders vooraf informeren");
-    }
+    let kleur = "phaseX";
+    if (titel.match(/1/)) kleur = "phase1";
+    else if (titel.match(/2/)) kleur = "phase2";
+    else if (titel.match(/3/)) kleur = "phase3";
+    else if (titel.match(/4/)) kleur = "phase4";
 
-    uitvoerdersData.push({
-      deel:i+1, netten, impact, fase, meerwerk, acties
-    });
+    faseData.push({ titel, risico });
 
-    const d=document.createElement("div");
-    d.className=`chunk ${cls}`;
-    d.innerHTML=`
-<h3>LV‑DEEL ${i+1}</h3>
-<strong>K&amp;L:</strong> ${netten.join(", ")||"–"}<br>
-<strong>Impact:</strong> ${impact} – ${fase}<br>
-<strong>Meerwerk:</strong> ${meerwerk}
+    const d = document.createElement("div");
+    d.className = `phase ${kleur}`;
+    d.innerHTML = `
+<h3>${titel}</h3>
+
+<strong>Belangrijk voor uitvoering:</strong>
+<ul>
+  <li>Werkzaamheden uitsluitend binnen deze fasegrenzen</li>
+  <li>Afstemming planning met overige fasen</li>
+</ul>
+
+<strong>Risico’s / aandachtspunten:</strong>
+${risico.length ? "<ul>" + risico.map(r => "<li>"+r+"</li>").join("") + "</ul>" : "<p>Geen expliciete risico’s benoemd.</p>"}
 `;
     output.appendChild(d);
-  });
+  }
 }
 
-/* ===== PDF 1: UITVOERDERSSAMENVATTING ===== */
-function exportUitvoerderPDF(){
+/* ===== UITVOERDERS-PDF ===== */
+function exportUitvoerderPDF() {
   const { jsPDF } = window.jspdf;
-  const pdf=new jsPDF();
-  let y=10;
+  const pdf = new jsPDF();
+  let y = 10;
 
   pdf.setFontSize(12);
-  pdf.text("Uitvoerderssamenvatting – LV & K&L",10,y); y+=10;
+  pdf.text("Uitvoerderssamenvatting – LV‑fasen", 10, y);
+  y += 10;
   pdf.setFontSize(10);
 
-  uitvoerdersData.forEach(d=>{
+  faseData.forEach(f => {
     const blok = `
-LV-deel ${d.deel}
-K&L: ${d.netten.join(", ")||"–"}
-Impact: ${d.impact} – ${d.fase}
-Meerwerk: ${d.meerwerk}
+${f.titel}
 
 Uitvoering:
-- ${d.acties.join("\n- ")}
+- Werk uitvoeren binnen fase-afbakening
+- Afstemmen met aangrenzende fasen
+- Planning kritisch volgen
+
+Risico’s:
+- ${f.risico.length ? f.risico.join("\n- ") : "Geen expliciete risico’s"}
 `;
-    const text = pdf.splitTextToSize(blok,180);
-    if(y+text.length*5>280){ pdf.addPage(); y=10; }
-    pdf.text(text,10,y);
-    y+=text.length*5+8;
+    const text = pdf.splitTextToSize(blok, 180);
+    if (y + text.length * 5 > 280) {
+      pdf.addPage();
+      y = 10;
+    }
+    pdf.text(text, 10, y);
+    y += text.length * 5 + 8;
   });
 
-  pdf.save("uitvoerderssamenvatting.pdf");
-}
-
-/* ===== PDF 2: BESTELLIJST PER FASE ===== */
-function exportBestelPDF(){
-  const { jsPDF } = window.jspdf;
-  const pdf=new jsPDF();
-  let y=10;
-
-  pdf.setFontSize(12);
-  pdf.text("Bestellijst & acties per fase",10,y); y+=10;
-  pdf.setFontSize(10);
-
-  const tekst = `
-VOORBEREIDINGSFASE
-- KLIC + aanvullende kabel- en leidinggegevens
-- Afstemming netbeheerders (verplicht bij gas/elektra)
-- Vergunningen & verkeersmaatregelen
-- Proefsleuven bij onduidelijke ligging
-
-UITVOERINGSFASE
-- Kraan + klein materieel afgestemd op fasering
-- Handgereedschap voor handmatig werk
-- Beschermingsmiddelen nabij netten
-- Extra mankracht bij beperkte werkruimte
-
-AFRONDINGSFASE
-- Keuringen (verdichting / herstel)
-- Revisie- en opleverdossier
-- Eindinspectie omgeving
-`;
-
-  const text = pdf.splitTextToSize(tekst,180);
-  pdf.text(text,10,y);
-  pdf.save("bestellijst-per-fase.pdf");
+  pdf.save("uitvoerderssamenvatting-LV-fasen.pdf");
 }
 </script>
 
