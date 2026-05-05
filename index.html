@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – OZ Analyse + PDF</title>
+<title>LV Intelligence – Complete Tool</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,24 +17,22 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
-  margin:5px;
+  margin-right:5px;
+  margin-top:5px;
 }
 
 .section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
 
-.oz {
-  background:#f9fafb;
-  padding:15px;
-  margin-top:12px;
-  border-radius:6px;
-  border-left:5px solid #2563eb;
-}
+.high { color:#dc2626; }
+.mid { color:#f59e0b; }
+
+.oz { background:#f9fafb; padding:10px; margin-top:10px; border-radius:6px; }
 </style>
 </head>
 
 <body>
 
-<div class="header">LV Intelligence – OZ Analyse + PDF</div>
+<div class="header">LV Intelligence – Directie Analyse + OZ Export</div>
 
 <div class="container">
 
@@ -42,15 +40,18 @@ button {
 
 <textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
-<button onclick="extractOZ()">Analyse OZ</button>
+<button onclick="analyse()">Analyse</button>
+<button onclick="extractOZ()">Genereer OZ lijst</button>
+<button onclick="exportOZ()">Export OZ (.txt)</button>
 
 <div id="out"></div>
+<div id="ozOut"></div>
 
 </div>
 
 <script>
 
-// ===== PDF LOADER =====
+// ===== PDF =====
 function loadScript(url){
   return new Promise(res=>{
     let s=document.createElement("script");
@@ -84,7 +85,7 @@ async function handlePDF(file){
     reader.readAsArrayBuffer(file);
 
   }catch(e){
-    alert("PDF fout: " + e);
+    alert("PDF fout: "+e);
   }
 }
 
@@ -92,10 +93,67 @@ pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
+// ===== FASES =====
+const fases = [
+  {name:"Bauabschnitt 1", plan:"Planstraße C", periode:"06/2026 → 07/2027"},
+  {name:"Bauabschnitt 2", plan:"Planstraße E", periode:"aansluitend → 07/2027"},
+  {name:"Bauabschnitt 3", plan:"Planstraße D Teil 1", periode:"08/2027 → 05/2028"},
+  {name:"Bauabschnitt 4", plan:"Planstraße D Teil 2", periode:"aansluitend → 05/2028"}
+];
+
+// ===== ANALYSE =====
+function analyse(){
+
+  let html = `
+  <div class="section">
+    <h2>Kritieke Pad</h2>
+    <p class="high">BA1 → BA2 → BA3 → BA4</p>
+    <p>Geen parallel uitvoering mogelijk – volledige afhankelijkheid</p>
+  </div>
+  `;
+
+  fases.forEach(f=>{
+    html += `
+    <div class="section">
+      <h2>${f.name} – ${f.plan}</h2>
+      <p><b>${f.periode}</b></p>
+
+      <p>
+      Deze fase omvat alle civieltechnische werkzaamheden zoals riolering,
+      nutsvoorzieningen en infrastructuur.
+      De uitvoering moet aaneengesloten plaatsvinden zonder onderbreking.
+      </p>
+
+      <p class="high">
+      Kritische fase zonder buffer – vertraging werkt direct door.
+      </p>
+
+      <h3>Werkzaamheden</h3>
+      <ul>
+        <li>Riolering (kanaalbouw)</li>
+        <li>Nutsvoorzieningen</li>
+        <li>Bouwwegen</li>
+        <li>Grondwerk</li>
+        <li>Aansluitingen</li>
+      </ul>
+
+      <h3>Risico’s</h3>
+      <ul>
+        <li class="high">Geen parallel uitvoering</li>
+        <li class="high">Strikte deadline</li>
+        <li class="mid">Afhankelijk derden</li>
+      </ul>
+    </div>
+    `;
+  });
+
+  out.innerHTML = html;
+}
+
 // ===== OZ DATA =====
 let ozData = [];
 
-// ===== OZ EXTRACT =====
+// ===== OZ EXTRACT (VERBETERD) =====
 function extractOZ(){
 
   let text = lvText.value;
@@ -104,88 +162,91 @@ function extractOZ(){
   ozData = [];
   let current = null;
 
-  for(let i=0;i<lines.length;i++){
+  lines.forEach(line => {
 
-    let line = lines[i].trim();
-
-    // detecteer OZ nummer (1.1.10.)
-    if(line.match(/^\d+(\.\d+)+\.$/)){
+    if(line.match(/oz\s*\d+/i)){
 
       if(current) ozData.push(current);
 
-      let title = lines[i+1] ? lines[i+1].trim() : "";
-
       current = {
-        nr: line,
-        title: title,
+        title: line.trim(),
         desc: ""
       };
 
-      i++; // skip titel regel
-
     } else if(current){
-      current.desc += " " + line;
+      current.desc += " " + line.trim();
     }
-  }
+
+  });
 
   if(current) ozData.push(current);
 
-  render();
-}
+  let html = `<div class="section"><h2>OZ Lijst + Vertaling</h2>`;
 
-// ===== RENDER =====
-function render(){
+  ozData.forEach(item=>{
 
-  let html = `<div class="section"><h2>OZ Analyse</h2>`;
-
-  ozData.forEach(o=>{
+    let nl = translateOZ(item.desc);
 
     html += `
     <div class="oz">
-
-      <h3>${o.nr} – ${o.title}</h3>
-
-      <b>Duits:</b><br>
-      ${o.desc}<br><br>
-
-      <b>Nederlands:</b><br>
-      ${translate(o)}
-
+      <b>${item.title}</b><br><br>
+      <div>${item.desc || "Geen omschrijving gevonden"}</div>
+      <br>
+      <div style="color:#374151;"><i>${nl}</i></div>
     </div>
     `;
   });
 
   html += "</div>";
 
-  out.innerHTML = html;
+  ozOut.innerHTML = html;
 }
 
-// ===== SLIMME VERTALING =====
-function translate(o){
+// ===== VERTALING =====
+function translateOZ(text){
 
-  let t = o.desc.toLowerCase();
+  if(!text) return "";
 
-  if(t.includes("baustelle einrichten")){
-    return `
-Inrichten en operationeel houden van de bouwplaats, inclusief het aanvoeren,
-plaatsen en onderhouden van bouwketen, sanitaire voorzieningen, machines en installaties.
+  let t = text;
 
-Daarnaast omvat dit het realiseren van energievoorzieningen, het inrichten van het terrein,
-toegangswegen en het onderhouden van alle voorzieningen gedurende de volledige bouwperiode.
+  const map = {
+    "Kanal":"riolering",
+    "Leitung":"leiding",
+    "verlegen":"aanleggen",
+    "herstellen":"realiseren",
+    "Erschließung":"aanleg",
+    "Versorgung":"nutsvoorziening",
+    "Bauarbeiten":"bouwwerkzaamheden"
+  };
 
-De kosten worden verrekend op basis van de voortgang van het project.
-    `;
+  for(let k in map){
+    let reg = new RegExp(k,"gi");
+    t = t.replace(reg, map[k]);
   }
 
-  if(t.includes("kanal")){
-    return "Aanleg van rioleringssystemen inclusief alle bijbehorende werkzaamheden.";
+  return t;
+}
+
+// ===== EXPORT =====
+function exportOZ(){
+
+  if(ozData.length === 0){
+    alert("Geen OZ data");
+    return;
   }
 
-  if(t.includes("leitung")){
-    return "Aanleggen van leidingen en nutsvoorzieningen volgens bestek.";
-  }
+  let content = ozData.map(item =>
+    item.title + "\n" +
+    item.desc + "\n" +
+    "NL: " + translateOZ(item.desc) + "\n\n"
+  ).join("");
 
-  return "Uitvoering van werkzaamheden conform bestek en technische eisen.";
+  let blob = new Blob([content], {type:"text/plain"});
+  let a = document.createElement("a");
+
+  a.href = URL.createObjectURL(blob);
+  a.download = "OZ_lijst.txt";
+  a.click();
 }
 
 </script>
