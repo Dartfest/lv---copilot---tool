@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Bauabschnitt Engine</title>
+<title>LV Intelligence – Complete Tool</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,6 +17,7 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
+  margin-top:5px;
 }
 
 .section { background:#fff; padding:15px; margin-top:12px; border-radius:8px; }
@@ -29,11 +30,14 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Bauabschnitt Analyse</div>
+<div class="header">LV Intelligence – Complete Analyse Tool</div>
 
 <div class="container">
 
-<textarea id="lvText" placeholder="Plak LV tekst"></textarea>
+<input type="file" id="pdfFile" accept=".pdf"><br><br>
+
+<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
+
 <button onclick="analyse()">Analyse</button>
 
 <div id="out"></div>
@@ -42,7 +46,54 @@ button {
 
 <script>
 
-// ===== STRUCTUUR (FIXED) =====
+// ===== PDF SCRIPT LOADER =====
+function loadScript(url){
+  return new Promise(res=>{
+    let s=document.createElement("script");
+    s.src=url;
+    s.onload=res;
+    document.body.appendChild(s);
+  });
+}
+
+// ===== PDF LEZEN =====
+async function handlePDF(file){
+
+  try {
+
+    if(typeof pdfjsLib === "undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    }
+
+    let reader = new FileReader();
+
+    reader.onload = async function(){
+
+      let pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text = "";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page = await pdf.getPage(i);
+        let content = await page.getTextContent();
+        text += content.items.map(i=>i.str).join(" ") + "\n";
+      }
+
+      lvText.value = text;
+
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  } catch(e){
+    alert("PDF laden mislukt: " + e);
+  }
+}
+
+pdfFile.onchange = e=>{
+  if(e.target.files[0]) handlePDF(e.target.files[0]);
+};
+
+// ===== STRUCTUUR =====
 function buildStructure(t){
 
   let lines = t.split("\n");
@@ -53,22 +104,29 @@ function buildStructure(t){
     let m = line.match(/(\d+)\.\s*bauabschnitt.*?planstraße\s*([a-z]).*?(teil\s*\d)?/i);
 
     if(m){
-
       result.push({
         nr: parseInt(m[1]),
         name: `Bauabschnitt ${m[1]}`,
         plan: `Planstraße ${m[2].toUpperCase()} ${m[3] ? m[3].toUpperCase() : ""}`,
         text: line.toLowerCase()
       });
-
     }
 
   });
 
+  if(result.length === 0){
+    result.push({
+      nr:1,
+      name:"Project (geen fases gevonden)",
+      plan:"-",
+      text:t
+    });
+  }
+
   return result.sort((a,b)=>a.nr-b.nr);
 }
 
-// ===== MATERIAAL PER FASE =====
+// ===== MATERIAAL =====
 function extractMaterials(text){
 
   let matches = text.match(/(dn\s*\d+).*?(pvc|pe|stahl|guss|rohr|leitung)?/gi) || [];
@@ -117,17 +175,17 @@ function analyseRisico(text){
 function summary(b){
 
   return `
-  ${b.name} omvat werkzaamheden binnen ${b.plan} en vormt een schakel in de totale projectfasering.
+  ${b.name} omvat werkzaamheden binnen ${b.plan} en vormt een essentiële schakel binnen de projectfasering.
 
-  Deze fase kan pas starten na afronding van de voorgaande fase en bepaalt daarmee direct de voortgang van het project.
-  Door de sequentiële uitvoering is er geen ruimte voor vertraging zonder impact op de einddatum.
+  Deze fase kan pas starten na afronding van voorgaande fases en bepaalt daarmee direct de voortgang van het project.
+  Door de sequentiële uitvoering is vertraging direct van invloed op de einddatum.
 
-  Binnen deze fase spelen logistiek, bereikbaarheid en afstemming met andere partijen een belangrijke rol.
-  Indien er sprake is van deeluitvoering (bijv. Teil 1 / Teil 2), vereist dit extra coördinatie binnen dezelfde planstraat.
+  Binnen deze fase spelen logistiek, bereikbaarheid en coördinatie met derden een belangrijke rol.
+  Bij opsplitsing in delen (bijv. Teil 1 / Teil 2) neemt de complexiteit verder toe.
 
-  Contractuele bepalingen zoals fasering en afhankelijkheden verhogen de complexiteit van uitvoering.
+  Contractuele voorwaarden zoals fasering en afhankelijkheden vergroten het uitvoeringsrisico.
 
-  Conclusie: ${b.name} is kritisch voor planning en vereist strakke sturing.
+  Conclusie: ${b.name} is kritisch en vereist strakke planning en actieve sturing.
   `;
 }
 
@@ -138,7 +196,7 @@ function buildPlanning(phases){
 
   return phases.map(p=>{
 
-    let duur = 6; // maanden
+    let duur = 6;
 
     let start = current;
     let end = start + duur;
@@ -207,44 +265,50 @@ function buildGantt(phases){
 // ===== MAIN =====
 function analyse(){
 
-  let t = lvText.value.toLowerCase();
-  if(!t) return;
+  try {
 
-  let structure = buildStructure(t);
-  let planning = buildPlanning(structure);
+    let t = lvText.value.toLowerCase();
+    if(!t) return;
 
-  out.innerHTML = `
+    let structure = buildStructure(t);
+    let planning = buildPlanning(structure);
 
-  ${buildGantt(planning)}
+    out.innerHTML = `
 
-  ${planning.map(b=>{
+      ${buildGantt(planning)}
 
-    let ris = analyseRisico(b.text);
-    let mat = extractMaterials(b.text);
+      ${planning.map(b=>{
 
-    return `
-    <div class="section">
+        let ris = analyseRisico(b.text);
+        let mat = extractMaterials(b.text);
 
-      <h2>${b.name} - ${b.plan}</h2>
+        return `
+        <div class="section">
 
-      <p>${summary(b)}</p>
+          <h2>${b.name} - ${b.plan}</h2>
 
-      <h3>Risico’s</h3>
-      <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+          <p>${summary(b)}</p>
 
-      <h3>Knelpunten</h3>
-      <ul>${ris.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
+          <h3>Risico’s</h3>
+          <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
 
-      <h3>Bestellijst</h3>
-      ${Object.entries(mat).map(([k,v])=>`
-        <div class="card">${k} → ${v}x</div>
-      `).join("")}
+          <h3>Knelpunten</h3>
+          <ul>${ris.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
 
-    </div>
+          <h3>Bestellijst</h3>
+          ${Object.entries(mat).map(([k,v])=>`
+            <div class="card">${k} → ${v}x</div>
+          `).join("")}
+
+        </div>
+        `;
+      }).join("")}
+
     `;
-  }).join("")}
 
-  `;
+  } catch(e){
+    out.innerHTML = `<div class="section high">Fout: ${e}</div>`;
+  }
 }
 
 </script>
