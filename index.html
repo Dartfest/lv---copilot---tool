@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Universal Engine</title>
+<title>LV Intelligence – Pro Phase Engine</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -35,7 +35,7 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Universal Engine</div>
+<div class="header">LV Intelligence – Pro Phase Engine</div>
 
 <div class="container">
 
@@ -89,14 +89,11 @@ pdfFile.onchange=e=>{
 };
 
 // ===== DATUM =====
-const months = {
-  januar:1,februar:2,märz:3,april:4,mai:5,
-  juni:6,juli:7,august:8,september:9
-};
+const months = {juni:6,juli:7,august:8,mai:5};
 
 function extractDates(t){
   let r=[], m;
-  let regex=/(januar|februar|märz|april|mai|juni|juli|august|september)\s+(20\d{2})/gi;
+  let regex=/(juni|juli|august|mai)\s+(20\d{2})/gi;
 
   while((m=regex.exec(t))){
     r.push(parseInt(m[2])*12 + months[m[1]]);
@@ -105,54 +102,48 @@ function extractDates(t){
   return r;
 }
 
-// ===== FASE DETECTIE =====
-function detectRawPhases(text){
+// ===== STRAKKE FASE DETECTIE =====
+function detectPlanstrassen(t){
 
-  let matches = text.match(/(bauabschnitt\s*\d+|planstraße\s*[a-z]|teil\s*\d+|los\s*\d+)/gi) || [];
+  let matches = t.match(/planstraße\s*[a-z]/gi) || [];
 
-  return matches.map(m => m.toLowerCase());
+  // uniek maken
+  let unique = [...new Set(matches.map(m=>m.toLowerCase()))];
+
+  return unique.map(p=>p.toUpperCase());
 }
 
-// ===== FASE BUNDELING =====
-function buildPhases(text){
+// ===== TEIL DETECTIE =====
+function detectTeil(t, plan){
 
-  let raw = detectRawPhases(text);
-  let map = {};
+  let teil = t.match(new RegExp(plan.toLowerCase() + ".*?teil\\s*\\d","gi"));
 
-  raw.forEach(r=>{
+  if(!teil) return [plan];
 
-    let key;
+  return teil.map((x,i)=>`${plan} - TEIL ${i+1}`);
+}
 
-    if(r.includes("planstraße")){
-      key = r.match(/planstraße\s*[a-z]/)[0];
-    }
-    else if(r.includes("bauabschnitt")){
-      key = r.match(/bauabschnitt\s*\d+/)[0];
-    }
-    else if(r.includes("los")){
-      key = r.match(/los\s*\d+/)[0];
-    }
-    else{
-      key = "overig";
-    }
+// ===== FASE BOUW =====
+function buildPhases(t){
 
-    if(!map[key]){
-      map[key] = {
-        name: key.toUpperCase(),
-        refs:[]
-      };
-    }
+  let plans = detectPlanstrassen(t);
+  let phases=[];
 
-    map[key].refs.push(r);
+  plans.forEach(p=>{
+    let delen = detectTeil(t,p);
+
+    delen.forEach(d=>{
+      phases.push({ name:d });
+    });
   });
 
-  return Object.values(map);
+  return phases;
 }
 
-// ===== DATUM KOPPELEN =====
-function attachDates(phases, text){
+// ===== DATUM KOPPELING =====
+function attachDates(phases,t){
 
-  let dates = extractDates(text);
+  let dates = extractDates(t);
 
   return phases.map((p,i)=>{
 
@@ -169,61 +160,55 @@ function attachDates(phases, text){
 }
 
 // ===== RISICO =====
-function addRisk(phases, text){
+function addRisk(p,t){
 
-  return phases.map(p=>{
+  let risico=[];
+  let aandacht=[];
 
-    let risico=[];
-    let aandacht=[];
+  if(t.includes("nicht parallel")){
+    risico.push("Gefaseerde uitvoering zonder overlap → langere doorlooptijd");
+  }
 
-    if(text.includes("nicht parallel")){
-      risico.push("Geen parallel uitvoering mogelijk");
-    }
+  if(t.includes("unterbrechung")){
+    risico.push("Mogelijke onderbrekingen tussen fases zonder vergoeding");
+  }
 
-    if(text.includes("unterbrechung")){
-      risico.push("Onderbreking mogelijk tussen fases");
-    }
+  if(t.includes("drittfirmen")){
+    risico.push("Afhankelijkheid van nutsbedrijven / derden");
+    aandacht.push("Strakke coördinatie noodzakelijk met externe partijen");
+  }
 
-    if(text.includes("drittfirmen")){
-      risico.push("Afhankelijkheid van derden");
-      aandacht.push("Afstemming met nutsbedrijven vereist");
-    }
+  if(t.includes("nicht vergütet")){
+    risico.push("Werkzaamheden niet afzonderlijk vergoed → financieel risico");
+  }
 
-    if(text.includes("nicht vergütet")){
-      risico.push("Niet vergoede werkzaamheden");
-    }
-
-    return {
-      ...p,
-      risico,
-      aandacht
-    };
-  });
+  return {risico,aandacht};
 }
 
-// ===== SAMENVATTING =====
-function phaseSummary(p){
+// ===== PRO SAMENVATTING =====
+function buildSummary(p,t){
 
-  let txt = [];
+  let txt=[];
 
-  txt.push("Werkzaamheden binnen deze fase volgens LV-structuur.");
+  txt.push("Deze fase vormt een onderdeel van de gefaseerde uitvoering binnen het project.");
 
-  if(p.risico.length){
-    txt.push("Risico’s aanwezig die planning en uitvoering beïnvloeden.");
+  txt.push("De werkzaamheden zijn gekoppeld aan de voortgang van voorgaande fases en moeten in logische volgorde worden uitgevoerd.");
+
+  if(t.includes("nicht parallel")){
+    txt.push("Parallelle uitvoering is contractueel uitgesloten, waardoor deze fase direct invloed heeft op de totale projectduur.");
   }
 
-  if(p.aandacht.length){
-    txt.push("Extra coördinatie en afstemming vereist.");
+  if(t.includes("drittfirmen")){
+    txt.push("De uitvoering is afhankelijk van derden, wat extra afstemming en risico op vertraging met zich meebrengt.");
   }
+
+  if(t.includes("nicht vergütet")){
+    txt.push("Binnen deze fase kunnen werkzaamheden vallen die niet afzonderlijk worden vergoed.");
+  }
+
+  txt.push("Succesvolle uitvoering vereist strakke planning, voorbereiding en coördinatie.");
 
   return txt;
-}
-
-// ===== DATUM FORMAT =====
-function formatDate(v){
-  let y = Math.floor(v/12);
-  let m = v % 12;
-  return `${m}/${y}`;
 }
 
 // ===== SCORE =====
@@ -233,7 +218,6 @@ function calcScore(phases){
   let roi = 100 - (risico * 5);
 
   let advies="GO", cls="good";
-
   if(roi<50){advies="NO-GO";cls="high";}
   else if(roi<70){advies="GO MET RISICO";cls="mid";}
 
@@ -247,8 +231,12 @@ function analyse(){
   if(!t) return;
 
   let phases = buildPhases(t);
-  phases = attachDates(phases, t);
-  phases = addRisk(phases, t);
+  phases = attachDates(phases,t);
+
+  phases = phases.map(p=>{
+    let r = addRisk(p,t);
+    return {...p, ...r};
+  });
 
   let score = calcScore(phases);
 
@@ -261,20 +249,20 @@ function analyse(){
   </div>
 
   <div class="section">
-    <h3>Fase Analyse (Universeel)</h3>
+    <h3>Fase Analyse (Planstraße)</h3>
 
     ${phases.map(p=>`
       <div class="card">
 
         <b>${p.name}</b><br>
-        Periode: ${formatDate(p.start)} → ${formatDate(p.end)}<br>
+        Periode: ${p.start} → ${p.end}<br>
         Duur: ${p.duur} mnd
 
         <br><br>
 
         <b>Samenvatting</b>
         <ul>
-          ${phaseSummary(p).map(x=>`<li>${x}</li>`).join("")}
+          ${buildSummary(p,t).map(x=>`<li>${x}</li>`).join("")}
         </ul>
 
         <b>Risico’s</b>
