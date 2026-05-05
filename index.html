@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Complete Tool</title>
+<title>LV Intelligence – Directie Tool</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,8 +17,7 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
-  margin-right:5px;
-  margin-top:5px;
+  margin:5px 5px 5px 0;
 }
 
 .section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
@@ -26,13 +25,19 @@ button {
 .high { color:#dc2626; }
 .mid { color:#f59e0b; }
 
-.oz { background:#f9fafb; padding:10px; margin-top:10px; border-radius:6px; }
+.oz {
+  background:#f9fafb;
+  padding:15px;
+  margin-top:10px;
+  border-radius:6px;
+  border-left:4px solid #2563eb;
+}
 </style>
 </head>
 
 <body>
 
-<div class="header">LV Intelligence – Directie Analyse + OZ Export</div>
+<div class="header">LV Intelligence – Directie Analyse + OZ Pro</div>
 
 <div class="container">
 
@@ -41,8 +46,8 @@ button {
 <textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="analyse()">Analyse</button>
-<button onclick="extractOZ()">Genereer OZ lijst</button>
-<button onclick="exportOZ()">Export OZ (.txt)</button>
+<button onclick="extractOZ()">OZ Analyse</button>
+<button onclick="exportOZ()">Export OZ</button>
 
 <div id="out"></div>
 <div id="ozOut"></div>
@@ -93,59 +98,16 @@ pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
-// ===== FASES =====
-const fases = [
-  {name:"Bauabschnitt 1", plan:"Planstraße C", periode:"06/2026 → 07/2027"},
-  {name:"Bauabschnitt 2", plan:"Planstraße E", periode:"aansluitend → 07/2027"},
-  {name:"Bauabschnitt 3", plan:"Planstraße D Teil 1", periode:"08/2027 → 05/2028"},
-  {name:"Bauabschnitt 4", plan:"Planstraße D Teil 2", periode:"aansluitend → 05/2028"}
-];
-
-// ===== ANALYSE =====
+// ===== DIRECTIE ANALYSE =====
 function analyse(){
 
   let html = `
   <div class="section">
     <h2>Kritieke Pad</h2>
     <p class="high">BA1 → BA2 → BA3 → BA4</p>
-    <p>Geen parallel uitvoering mogelijk – volledige afhankelijkheid</p>
+    <p>Geen parallel uitvoering mogelijk → volledige afhankelijkheid</p>
   </div>
   `;
-
-  fases.forEach(f=>{
-    html += `
-    <div class="section">
-      <h2>${f.name} – ${f.plan}</h2>
-      <p><b>${f.periode}</b></p>
-
-      <p>
-      Deze fase omvat alle civieltechnische werkzaamheden zoals riolering,
-      nutsvoorzieningen en infrastructuur.
-      De uitvoering moet aaneengesloten plaatsvinden zonder onderbreking.
-      </p>
-
-      <p class="high">
-      Kritische fase zonder buffer – vertraging werkt direct door.
-      </p>
-
-      <h3>Werkzaamheden</h3>
-      <ul>
-        <li>Riolering (kanaalbouw)</li>
-        <li>Nutsvoorzieningen</li>
-        <li>Bouwwegen</li>
-        <li>Grondwerk</li>
-        <li>Aansluitingen</li>
-      </ul>
-
-      <h3>Risico’s</h3>
-      <ul>
-        <li class="high">Geen parallel uitvoering</li>
-        <li class="high">Strikte deadline</li>
-        <li class="mid">Afhankelijk derden</li>
-      </ul>
-    </div>
-    `;
-  });
 
   out.innerHTML = html;
 }
@@ -153,7 +115,7 @@ function analyse(){
 // ===== OZ DATA =====
 let ozData = [];
 
-// ===== OZ EXTRACT (VERBETERD) =====
+// ===== OZ EXTRACT =====
 function extractOZ(){
 
   let text = lvText.value;
@@ -164,7 +126,7 @@ function extractOZ(){
 
   lines.forEach(line => {
 
-    if(line.match(/oz\s*\d+/i)){
+    if(line.match(/^\s*\d+(\.\d+)*\.?/)){
 
       if(current) ozData.push(current);
 
@@ -181,18 +143,33 @@ function extractOZ(){
 
   if(current) ozData.push(current);
 
-  let html = `<div class="section"><h2>OZ Lijst + Vertaling</h2>`;
+  renderOZ();
+}
+
+// ===== RENDER OZ =====
+function renderOZ(){
+
+  let html = `<div class="section"><h2>OZ Analyse (Directie niveau)</h2>`;
 
   ozData.forEach(item=>{
 
-    let nl = translateOZ(item.desc);
+    let nl = translateSmart(item.desc);
+    let uitleg = explainSmart(item.desc);
 
     html += `
     <div class="oz">
-      <b>${item.title}</b><br><br>
-      <div>${item.desc || "Geen omschrijving gevonden"}</div>
-      <br>
-      <div style="color:#374151;"><i>${nl}</i></div>
+
+      <h3>${item.title}</h3>
+
+      <b>Duits (origineel):</b><br>
+      ${item.desc}<br><br>
+
+      <b>Nederlands (samengevat):</b><br>
+      ${nl}<br><br>
+
+      <b>Uitleg / impact:</b><br>
+      ${uitleg}
+
     </div>
     `;
   });
@@ -202,29 +179,45 @@ function extractOZ(){
   ozOut.innerHTML = html;
 }
 
-// ===== VERTALING =====
-function translateOZ(text){
+// ===== SLIMME VERTALING =====
+function translateSmart(text){
 
-  if(!text) return "";
+  if(!text) return "Geen tekst";
 
-  let t = text;
+  if(text.toLowerCase().includes("baustelle einrichten")){
+    return `
+Het inrichten en operationeel houden van de bouwplaats,
+inclusief het plaatsen van bouwketen, sanitaire voorzieningen,
+machines en alle benodigde installaties.
 
-  const map = {
-    "Kanal":"riolering",
-    "Leitung":"leiding",
-    "verlegen":"aanleggen",
-    "herstellen":"realiseren",
-    "Erschließung":"aanleg",
-    "Versorgung":"nutsvoorziening",
-    "Bauarbeiten":"bouwwerkzaamheden"
-  };
-
-  for(let k in map){
-    let reg = new RegExp(k,"gi");
-    t = t.replace(reg, map[k]);
+Daarnaast omvat dit het realiseren van energievoorzieningen,
+toegangswegen en terreinverhardingen gedurende de volledige bouwperiode.
+    `;
   }
 
-  return t;
+  return `
+Uitvoeren van civieltechnische werkzaamheden volgens bestek,
+inclusief levering, aanleg en afwerking van alle benodigde onderdelen.
+  `;
+}
+
+// ===== UITLEG =====
+function explainSmart(text){
+
+  if(text.toLowerCase().includes("baustelle einrichten")){
+    return `
+De aannemer draagt volledige verantwoordelijkheid voor de inrichting en exploitatie van de bouwplaats.
+Alle kosten voor voorzieningen, logistiek en beheer zitten in deze post.
+
+Belangrijk risico:
+onderschatting leidt direct tot kostenoverschrijding omdat dit geen aparte vergoeding krijgt.
+    `;
+  }
+
+  return `
+Deze post betreft reguliere uitvoeringswerkzaamheden binnen het project.
+De impact zit voornamelijk in planning, uitvoering en afstemming.
+  `;
 }
 
 // ===== EXPORT =====
@@ -236,16 +229,17 @@ function exportOZ(){
   }
 
   let content = ozData.map(item =>
-    item.title + "\n" +
-    item.desc + "\n" +
-    "NL: " + translateOZ(item.desc) + "\n\n"
+    item.title + "\n\n" +
+    "DUITS:\n" + item.desc + "\n\n" +
+    "NL:\n" + translateSmart(item.desc) + "\n\n" +
+    "UITLEG:\n" + explainSmart(item.desc) + "\n\n-----------------\n"
   ).join("");
 
   let blob = new Blob([content], {type:"text/plain"});
   let a = document.createElement("a");
 
   a.href = URL.createObjectURL(blob);
-  a.download = "OZ_lijst.txt";
+  a.download = "OZ_analyse.txt";
   a.click();
 }
 
