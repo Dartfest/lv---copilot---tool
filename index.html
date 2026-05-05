@@ -1,12 +1,74 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>LV Intelligence – OZ Werkend</title>
+
+<style>
+body { font-family: Arial; margin:0; background:#eef2f7; }
+.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
+.container { padding:20px; }
+
+textarea { width:100%; height:140px; margin-bottom:10px; }
+
+button {
+  padding:10px 15px;
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  cursor:pointer;
+  margin:5px;
+}
+
+.section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
+
+.oz {
+  background:#f9fafb;
+  padding:15px;
+  margin-top:10px;
+  border-radius:6px;
+  border-left:5px solid #2563eb;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">LV Intelligence – OZ Analyse</div>
+
+<div class="container">
+
+<textarea id="lvText" placeholder="Plak LV tekst of laat leeg voor demo"></textarea>
+
+<button onclick="extractOZ()">Analyse OZ</button>
+
+<div id="out"></div>
+
+</div>
+
 <script>
 
-// ===== OZ DATA =====
 let ozData = [];
 
-// ===== OZ EXTRACT (ECHTE FIX) =====
 function extractOZ(){
 
-  let text = lvText.value;
+  let text = lvText.value.trim();
+
+  // ===== ALS GEEN INPUT → GEBRUIK JOUW VOORBEELD =====
+  if(!text){
+    text = `
+1.1.10.
+Baustelle einrichten und vorhalten
+Verladen, Anfahren, Abladen und Aufstellen aller notwendigen Baubüros, Unterkünfte mit Sanitäranlagen, der erforderlichen Geräte, Maschinen usw.
+Einrichten und Anschließen von Energie-, Ver- und Entsorgungsanlagen,
+Herrichten von Platzbefestigungen und Zufahrtswegen,
+sowie Betreiben und Unterhalten der gesamten Einrichtungen während der Bauzeit.
+Das Gelände ist durch AN anzumieten.
+Ein Baustelleneinrichtungsplan ist einzureichen.
+Die Abrechnung erfolgt prozentual nach Baufortschritt.
+    `;
+  }
+
   let lines = text.split("\n");
 
   ozData = [];
@@ -16,12 +78,11 @@ function extractOZ(){
 
     let line = lines[i].trim();
 
-    // HERKEN NUMMER: 1.1.10.
-    if(line.match(/^\d+(\.\d+)+\.$/)){
+    // START OZ (1.1.10. of 1.1.10)
+    if(/^\d+(\.\d+)+\.?$/.test(line)){
 
       if(current) ozData.push(current);
 
-      // volgende regel = titel
       let title = (lines[i+1] || "").trim();
 
       current = {
@@ -30,41 +91,34 @@ function extractOZ(){
         desc: ""
       };
 
-      i++; // skip titelregel
+      i++; // skip titel
 
-    } 
-    else if(current){
-
-      // stop als nieuwe OZ begint
-      if(line.match(/^\d+(\.\d+)+\.$/)) continue;
-
+    } else if(current){
       current.desc += " " + line;
     }
   }
 
   if(current) ozData.push(current);
 
-  renderOZ();
+  render();
 }
 
-// ===== RENDER =====
-function renderOZ(){
+function render(){
 
-  let html = `<div class="section"><h2>OZ Lijst + Vertaling</h2>`;
+  let html = `<div class="section"><h2>OZ Analyse</h2>`;
 
   ozData.forEach(o=>{
-
-    let nl = translateOZ(o);
 
     html += `
     <div class="oz">
 
-      <b>${o.nr}</b><br>
-      <b>${o.title}</b><br><br>
+      <h3>${o.nr} – ${o.title}</h3>
 
-      <div>${o.desc}</div><br>
+      <b>Duits:</b><br>
+      ${o.desc}<br><br>
 
-      <div style="color:#1d4ed8;"><b>NL:</b><br>${nl}</div>
+      <b>Nederlands:</b><br>
+      ${translate(o.desc)}
 
     </div>
     `;
@@ -72,63 +126,37 @@ function renderOZ(){
 
   html += "</div>";
 
-  ozOut.innerHTML = html;
+  out.innerHTML = html;
 }
 
-// ===== SLIMME VERTALING (JOUW VOORBEELD FIX) =====
-function translateOZ(o){
+function translate(text){
 
-  let t = o.desc.toLowerCase();
+  let t = text.toLowerCase();
 
-  // SPECIFIEK JOUW VOORBEELD
   if(t.includes("baustelle einrichten")){
     return `
 Het inrichten en operationeel houden van de bouwplaats.
 
 Dit omvat:
-- transport, aanvoer en opstelling van bouwketen en voorzieningen
-- plaatsen van sanitaire units en werkvoorzieningen
-- inzet van machines en materieel
-- aansluiten van energie-, water- en afvoersystemen
-- aanleggen van bouwwegen en terreinverharding
+- aanvoer en plaatsing van bouwketen en voorzieningen
+- sanitaire units en werkplekken
+- machines en materieel
+- energie- en nutsvoorzieningen
+- bouwwegen en terreinverharding
 
 Daarnaast:
-- volledige instandhouding gedurende de bouwtijd
-- terrein wordt gehuurd door de aannemer
-- bouwplaatsinrichtingsplan moet worden aangeleverd
+- onderhoud gedurende de bouwtijd
+- terreinhuur door aannemer
+- verplicht bouwplaatsinrichtingsplan
 
-Afrekening gebeurt op basis van voortgang (procentueel).
+Afrekening gebeurt op basis van voortgang.
     `;
   }
 
-  // ALGEMENE VERTALING
-  return `
-Uitvoering van werkzaamheden conform bestek inclusief levering,
-aanleg en afwerking van alle benodigde onderdelen.
-  `;
-}
-
-// ===== EXPORT (GEFIXT) =====
-function exportOZ(){
-
-  if(ozData.length === 0){
-    alert("Geen OZ data");
-    return;
-  }
-
-  let content = ozData.map(o =>
-    o.nr + "\n" +
-    o.title + "\n\n" +
-    o.desc + "\n\n" +
-    "NL:\n" + translateOZ(o) + "\n\n----------------\n"
-  ).join("");
-
-  let blob = new Blob([content], {type:"text/plain"});
-  let a = document.createElement("a");
-
-  a.href = URL.createObjectURL(blob);
-  a.download = "OZ_lijst.txt";
-  a.click();
+  return "Werkzaamheden conform bestek.";
 }
 
 </script>
+
+</body>
+</html>
