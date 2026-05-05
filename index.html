@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – OZ Correct</title>
+<title>LV Intelligence – OZ Analyse + PDF</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -34,11 +34,13 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – OZ Analyse (Correct)</div>
+<div class="header">LV Intelligence – OZ Analyse + PDF</div>
 
 <div class="container">
 
-<textarea id="lvText" placeholder="Plak LV tekst"></textarea>
+<input type="file" id="pdfFile" accept=".pdf"><br><br>
+
+<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="extractOZ()">Analyse OZ</button>
 
@@ -48,8 +50,52 @@ button {
 
 <script>
 
+// ===== PDF LOADER =====
+function loadScript(url){
+  return new Promise(res=>{
+    let s=document.createElement("script");
+    s.src=url;
+    s.onload=res;
+    document.body.appendChild(s);
+  });
+}
+
+async function handlePDF(file){
+  try{
+    if(typeof pdfjsLib==="undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    }
+
+    let reader=new FileReader();
+
+    reader.onload=async function(){
+      let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text="";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page=await pdf.getPage(i);
+        let c=await page.getTextContent();
+        text+=c.items.map(i=>i.str).join(" ")+"\n";
+      }
+
+      lvText.value=text;
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  }catch(e){
+    alert("PDF fout: " + e);
+  }
+}
+
+pdfFile.onchange=e=>{
+  if(e.target.files[0]) handlePDF(e.target.files[0]);
+};
+
+// ===== OZ DATA =====
 let ozData = [];
 
+// ===== OZ EXTRACT =====
 function extractOZ(){
 
   let text = lvText.value;
@@ -62,7 +108,7 @@ function extractOZ(){
 
     let line = lines[i].trim();
 
-    // START OZ (zoals 1.1.10.)
+    // detecteer OZ nummer (1.1.10.)
     if(line.match(/^\d+(\.\d+)+\.$/)){
 
       if(current) ozData.push(current);
@@ -78,12 +124,6 @@ function extractOZ(){
       i++; // skip titel regel
 
     } else if(current){
-
-      // stop bij nieuwe OZ
-      if(line.match(/^\d+(\.\d+)+\.$/)){
-        continue;
-      }
-
       current.desc += " " + line;
     }
   }
@@ -93,6 +133,7 @@ function extractOZ(){
   render();
 }
 
+// ===== RENDER =====
 function render(){
 
   let html = `<div class="section"><h2>OZ Analyse</h2>`;
@@ -136,10 +177,15 @@ De kosten worden verrekend op basis van de voortgang van het project.
     `;
   }
 
-  return `
-Uitvoering van werkzaamheden conform bestek, inclusief levering,
-aanleg en afwerking van alle benodigde onderdelen.
-  `;
+  if(t.includes("kanal")){
+    return "Aanleg van rioleringssystemen inclusief alle bijbehorende werkzaamheden.";
+  }
+
+  if(t.includes("leitung")){
+    return "Aanleggen van leidingen en nutsvoorzieningen volgens bestek.";
+  }
+
+  return "Uitvoering van werkzaamheden conform bestek en technische eisen.";
 }
 
 </script>
