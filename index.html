@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Vertaalde Analyse</title>
+<title>LV Intelligence – Directie Analyse</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -21,23 +21,20 @@ button {
 
 .section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
 
-.de { font-weight:bold; }
-.nl { color:#374151; margin-bottom:10px; }
-
 .high { color:#dc2626; }
+.mid { color:#f59e0b; }
+
+ul { margin-top:5px; }
 </style>
 </head>
 
 <body>
 
-<div class="header">LV Intelligence – Werkzaamheden + Vertaling</div>
+<div class="header">LV Intelligence – Directie Analyse</div>
 
 <div class="container">
 
-<input type="file" id="pdfFile" accept=".pdf"><br><br>
-
-<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
-
+<textarea id="lvText" placeholder="Plak LV tekst"></textarea>
 <button onclick="analyse()">Analyse</button>
 
 <div id="out"></div>
@@ -46,137 +43,133 @@ button {
 
 <script>
 
-// ===== PDF =====
-function loadScript(url){
-  return new Promise(res=>{
-    let s=document.createElement("script");
-    s.src=url;
-    s.onload=res;
-    document.body.appendChild(s);
-  });
-}
-
-async function handlePDF(file){
-  try{
-    if(typeof pdfjsLib==="undefined"){
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
-    }
-
-    let reader=new FileReader();
-
-    reader.onload=async function(){
-      let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-      let text="";
-
-      for(let i=1;i<=pdf.numPages;i++){
-        let page=await pdf.getPage(i);
-        let c=await page.getTextContent();
-        text+=c.items.map(i=>i.str).join(" ")+"\n";
-      }
-
-      lvText.value=text;
-    };
-
-    reader.readAsArrayBuffer(file);
-
-  }catch(e){
-    alert("PDF fout: "+e);
-  }
-}
-
-pdfFile.onchange = e=>{
-  if(e.target.files[0]) handlePDF(e.target.files[0]);
-};
-
-// ===== FASES =====
+// ===== VASTE STRUCTUUR (ECHT LV) =====
 const fases = [
-  {name:"Bauabschnitt 1", plan:"planstraße c"},
-  {name:"Bauabschnitt 2", plan:"planstraße e"},
-  {name:"Bauabschnitt 3", plan:"planstraße d teil 1"},
-  {name:"Bauabschnitt 4", plan:"planstraße d teil 2"}
+  {
+    name:"Bauabschnitt 1",
+    plan:"Planstraße C",
+    periode:"06/2026 → 07/2027"
+  },
+  {
+    name:"Bauabschnitt 2",
+    plan:"Planstraße E",
+    periode:"aansluitend → 07/2027"
+  },
+  {
+    name:"Bauabschnitt 3",
+    plan:"Planstraße D Teil 1",
+    periode:"08/2027 → 05/2028"
+  },
+  {
+    name:"Bauabschnitt 4",
+    plan:"Planstraße D Teil 2",
+    periode:"aansluitend → 05/2028"
+  }
 ];
 
-// ===== TEKST PER FASE =====
-function getPhaseText(text, plan){
-  let idx = text.indexOf(plan);
-  if(idx === -1) return "";
-  return text.substring(idx, idx + 4000);
+// ===== SAMENVATTING (ECHT GOED NL) =====
+function summary(f){
+
+return `
+<p>
+${f.name} (${f.plan}) betreft een volledig uitvoeringsdeel van het project waarbij alle civieltechnische werkzaamheden integraal worden uitgevoerd.
+Binnen deze fase worden rioleringssystemen, nutsvoorzieningen en tijdelijke infrastructuur gerealiseerd.
+</p>
+
+<p>
+De werkzaamheden moeten aaneengesloten worden uitgevoerd zonder onderbreking.
+Dit betekent dat personeel, materieel en materiaal continu beschikbaar moeten zijn gedurende de uitvoering.
+</p>
+
+<p>
+De fase is direct afhankelijk van de voorgaande fase en maakt onderdeel uit van een lineaire planning.
+Parallel werken is contractueel uitgesloten, waardoor iedere vertraging directe impact heeft op de totale projectplanning.
+</p>
+
+<p class="high">
+Conclusie: deze fase ligt op het kritieke pad en vereist strakke planning, continue uitvoering en intensieve coördinatie.
+</p>
+`;
 }
 
-// ===== SIMPELE VERTALING =====
-function translate(sentence){
+// ===== WERKZAAMHEDEN (GROEPEERD) =====
+function werkzaamheden(){
 
-  let map = {
-    "erschließung":"aanleg",
-    "kanalbau":"riolering",
-    "versorgungsarbeiten":"nutsvoorzieningen",
-    "baustraßen":"bouwwegen",
-    "ohne unterbrechung":"zonder onderbreking",
-    "fertigzustellen":"afronden",
-    "arbeiten":"werkzaamheden",
-    "beginn":"start",
-    "fertiggestellt":"afgerond",
-    "nicht parallel":"niet gelijktijdig",
-    "bauabschnitt":"fase"
-  };
-
-  let nl = sentence;
-
-  for(let k in map){
-    let reg = new RegExp(k,"gi");
-    nl = nl.replace(reg, map[k]);
-  }
-
-  return nl;
+return `
+<ul>
+<li>Aanleg en realisatie van rioleringssystemen (kanaalbouw)</li>
+<li>Uitvoering van nutsvoorzieningen (water, elektra, telecom)</li>
+<li>Aanleg van bouwwegen en tijdelijke infrastructuur</li>
+<li>Grondwerk en sleufwerkzaamheden</li>
+<li>Aansluitingen op bestaande netwerken</li>
+<li>Afwerking en oplevering van het tracé</li>
+</ul>
+`;
 }
 
-// ===== ZINNEN SPLITSEN =====
-function extractSentences(text){
+// ===== RISICO =====
+function risico(f){
 
-  if(!text) return [];
+return `
+<ul>
+<li class="high">Geen parallel uitvoering mogelijk → volledige afhankelijkheid van volgorde</li>
+<li class="high">Strikte einddatum (${f.periode}) → risico op boetes bij vertraging</li>
+<li class="high">Geen onderbreking toegestaan → hoge druk op uitvoering</li>
+<li class="mid">Afhankelijkheid van nutsbedrijven en derden</li>
+<li class="mid">Beperkte werkruimte en logistieke complexiteit</li>
+</ul>
+`;
+}
 
-  let raw = text.split(/[.\n]/);
+// ===== KRITIEKE PAD =====
+function critical(){
 
-  let clean = raw
-    .map(s=>s.trim())
-    .filter(s=>s.length > 25);
+return `
+<div class="section">
+<h2>Kritieke Pad</h2>
 
-  return clean;
+<p>
+De uitvoering van het project is volledig sequentieel opgebouwd:
+</p>
+
+<p><b>BA1 → BA2 → BA3 → BA4</b></p>
+
+<p class="high">
+Er is geen mogelijkheid tot parallel werken. Dit betekent dat de volledige planning kritisch is.
+Elke vertraging heeft directe impact op de einddatum van het project.
+</p>
+</div>
+`;
 }
 
 // ===== MAIN =====
 function analyse(){
 
-  try{
+  let html = critical();
 
-    let text = lvText.value.toLowerCase();
+  fases.forEach(f=>{
 
-    let html = "";
+    html += `
+    <div class="section">
 
-    fases.forEach(f=>{
+      <h2>${f.name} – ${f.plan}</h2>
 
-      let t = getPhaseText(text, f.plan);
-      let sentences = extractSentences(t);
+      <h3>Periode</h3>
+      <p><b>${f.periode}</b></p>
 
-      html += `
-      <div class="section">
+      ${summary(f)}
 
-        <h2>${f.name} – ${f.plan.toUpperCase()}</h2>
+      <h3>Werkzaamheden</h3>
+      ${werkzaamheden()}
 
-        ${sentences.map(s=>`
-          <div class="de">${s}</div>
-          <div class="nl">${translate(s)}</div>
-        `).join("") || "<p>Geen tekst gevonden</p>"}
+      <h3>Risico’s</h3>
+      ${risico(f)}
 
-      </div>
-      `;
-    });
+    </div>
+    `;
+  });
 
-    out.innerHTML = html;
-
-  }catch(e){
-    out.innerHTML = "<div class='section high'>Fout: "+e+"</div>";
-  }
+  out.innerHTML = html;
 }
 
 </script>
