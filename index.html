@@ -1,49 +1,91 @@
-<script>
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>LV Analyse – Fixed</title>
 
-// ===== PARSE EXACTE STRUCTUUR =====
-function parsePhases(t){
+<style>
+body { font-family: Arial; margin:0; background:#eef2f7; }
+.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
+.container { padding:20px; }
 
-  let regex = /(\d)\.\s*bauabschnitt:\s*planstraße\s*([a-z]).*?(teil\s*\d)?/gi;
-  let phases = [];
-  let m;
+textarea { width:100%; height:150px; margin-bottom:10px; }
 
-  while((m = regex.exec(t))){
-
-    let nr = m[1];
-    let plan = m[2].toUpperCase();
-    let teil = m[3] ? m[3].toUpperCase() : "";
-
-    let name = `Bauabschnitt ${nr} - Planstraße ${plan} ${teil}`;
-
-    phases.push({
-      nr: parseInt(nr),
-      plan,
-      teil,
-      name
-    });
-  }
-
-  return phases.sort((a,b)=>a.nr - b.nr);
+button {
+  padding:8px 12px;
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  cursor:pointer;
 }
 
-// ===== SPLIT TEKST PER FASE =====
-function splitPerPhase(t, phases){
+.section { background:#fff; padding:15px; margin-top:12px; border-radius:8px; }
+.card { background:#f9fafb; padding:10px; margin-top:8px; border-radius:6px; }
 
-  let result = [];
+.high { color:#dc2626; }
+.mid { color:#f59e0b; }
+</style>
+</head>
 
-  phases.forEach((p,i)=>{
+<body>
 
-    let startIndex = t.toLowerCase().indexOf(p.plan.toLowerCase());
-    let endIndex = i < phases.length-1 
-      ? t.toLowerCase().indexOf(phases[i+1].plan.toLowerCase())
-      : t.length;
+<div class="header">LV Intelligence – Werkende Versie</div>
 
-    let sub = t.substring(startIndex, endIndex);
+<div class="container">
 
-    result.push({...p, text: sub});
+<textarea id="lvText">
+
+1. Bauabschnitt: Planstraße C (Else- Scheuer - Weg )
+2. Bauabschnitt: Planstraße E (Else- Scheuer - Weg und Elfriede- Meyer - Weg ( bis Henriette- Herz -Weg ))
+3. Bauabschnitt: Planstraße D (Else- Scheuer - Weg ) - Teil 1
+4. Bauabschnitt: Planstraße D (Else- Scheuer - Weg ) - Teil 2
+
+</textarea>
+
+<button onclick="analyse()">Analyse</button>
+
+<div id="out"></div>
+
+</div>
+
+<script>
+
+// ===== ROBUUSTE PARSER =====
+function parsePhases(t){
+
+  let lines = t.split("\n");
+  let phases = [];
+
+  lines.forEach(line => {
+
+    let m = line.match(/(\d+)\.\s*bauabschnitt.*?planstraße\s*([a-z]).*?(teil\s*\d)?/i);
+
+    if(m){
+
+      phases.push({
+        nr: parseInt(m[1]),
+        plan: m[2].toUpperCase(),
+        teil: m[3] ? m[3].toUpperCase() : "",
+        name: `Bauabschnitt ${m[1]} - Planstraße ${m[2].toUpperCase()} ${m[3] ? m[3].toUpperCase() : ""}`,
+        raw: line
+      });
+
+    }
+
   });
 
-  return result;
+  // fallback als niets gevonden
+  if(phases.length === 0){
+    return [{
+      nr:1,
+      plan:"?",
+      teil:"",
+      name:"Geen fases gevonden (controleer tekst)",
+      raw:t
+    }];
+  }
+
+  return phases.sort((a,b)=>a.nr-b.nr);
 }
 
 // ===== MATERIAAL =====
@@ -95,60 +137,69 @@ function analyseRisico(text){
 function bigSummary(p){
 
   return `
-  ${p.name} vormt een essentiële fase binnen het project en bepaalt de voortgang van de totale uitvoering.
+  ${p.name} is een afzonderlijke uitvoeringsfase binnen het project en vormt een schakel in de totale fasering.
 
-  Deze fase is gepositioneerd als stap ${p.nr} binnen de fasering en kan pas starten na afronding van de voorgaande fase.
-  Hierdoor ontstaat een kettingreactie waarbij vertraging direct effect heeft op de totale planning.
+  Deze fase volgt op de voorgaande werkzaamheden en heeft directe invloed op de voortgang van het project. 
+  Door de gefaseerde opbouw kunnen werkzaamheden niet willekeurig worden uitgevoerd en is volgordelijkheid bepalend.
 
-  Binnen deze fase worden werkzaamheden uitgevoerd aan ${p.plan}, 
-  waarbij de uitvoering afhankelijk is van zowel interne planning als externe partijen.
+  Binnen deze fase worden werkzaamheden uitgevoerd aan de betreffende planstraat (${p.plan}), 
+  waarbij logistiek, bereikbaarheid en afstemming met andere partijen een belangrijke rol spelen.
 
-  Contractueel is de uitvoering beperkt door fasering en mogelijk ontbreken van parallelle werkzaamheden, 
-  wat leidt tot verhoogde druk op doorlooptijd en uitvoering.
+  Indien deze fase is opgesplitst (${p.teil || "geen opsplitsing"}), 
+  betekent dit dat de uitvoering verder gefaseerd is en extra coördinatie vereist.
 
-  Indien sprake is van deeluitvoering (${p.teil || "geen opsplitsing"}), 
-  vereist dit extra coördinatie binnen dezelfde planstraat.
+  Eventuele vertragingen binnen deze fase hebben direct impact op opvolgende fases, 
+  waardoor strakke planning en voorbereiding essentieel zijn.
 
-  Conclusie: deze fase vraagt om strakke planning, goede voorbereiding en actieve sturing op risico’s en uitvoering.
+  Conclusie: ${p.name} is een kritische schakel binnen het project en vereist actieve sturing op uitvoering en planning.
   `;
 }
 
 // ===== MAIN =====
 function analyse(){
 
-  let t = lvText.value.toLowerCase();
-  if(!t) return;
+  try {
 
-  let phases = parsePhases(t);
-  let split = splitPerPhase(t, phases);
+    let t = lvText.value.toLowerCase();
+    let phases = parsePhases(t);
 
-  out.innerHTML = split.map(p=>{
+    out.innerHTML = phases.map(p=>{
 
-    let mat = extractMaterials(p.text);
-    let ris = analyseRisico(p.text);
+      let mat = extractMaterials(p.raw);
+      let ris = analyseRisico(p.raw);
 
-    return `
-    <div class="section">
+      return `
+      <div class="section">
 
-      <h2>${p.name}</h2>
+        <h2>${p.name}</h2>
 
-      <p>${bigSummary(p)}</p>
+        <p>${bigSummary(p)}</p>
 
-      <h3>Risico’s</h3>
-      <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+        <h3>Risico’s</h3>
+        <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
 
-      <h3>Knelpunten</h3>
-      <ul>${ris.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
+        <h3>Knelpunten</h3>
+        <ul>${ris.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
 
-      <h3>Bestellijst</h3>
-      ${Object.entries(mat).map(([k,v])=>`
-        <div class="card">${k} → ${v}x</div>
-      `).join("")}
+        <h3>Bestellijst</h3>
+        ${Object.entries(mat).map(([k,v])=>`
+          <div class="card">${k} → ${v}x</div>
+        `).join("")}
 
-    </div>
-    `;
+      </div>
+      `;
 
-  }).join("");
+    }).join("");
+
+  } catch(e){
+
+    out.innerHTML = `<div class="section high">Fout in analyse: ${e}</div>`;
+
+  }
+
 }
 
 </script>
+
+</body>
+</html>
