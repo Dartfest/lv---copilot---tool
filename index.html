@@ -1,133 +1,171 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>LV Intelligence – Stabiel</title>
+
+<style>
+body { font-family: Arial; margin:0; background:#eef2f7; }
+.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
+.container { padding:20px; }
+textarea { width:100%; height:140px; margin-bottom:10px; }
+
+button {
+  padding:10px 15px;
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  cursor:pointer;
+}
+
+.section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
+.high { color:#dc2626; }
+.mid { color:#f59e0b; }
+</style>
+</head>
+
+<body>
+
+<div class="header">LV Intelligence – Analyse</div>
+
+<div class="container">
+
+<input type="file" id="pdfFile" accept=".pdf"><br><br>
+
+<textarea id="lvText"></textarea>
+
+<button onclick="analyse()">Analyse</button>
+
+<div id="out"></div>
+
+</div>
+
 <script>
 
-// ===== CONTRACTUELE PLANNING UIT LV =====
-const fases = [
-  {
-    id:1,
-    name:"Bauabschnitt 1",
-    plan:"planstraße c",
-    start:"06/2026",
-    end:"07/2027",
-    afhankelijk:"start project"
-  },
-  {
-    id:2,
-    name:"Bauabschnitt 2",
-    plan:"planstraße e",
-    start:"na BA1",
-    end:"07/2027",
-    afhankelijk:"na Bauabschnitt 1"
-  },
-  {
-    id:3,
-    name:"Bauabschnitt 3",
-    plan:"planstraße d teil 1",
-    start:"08/2027",
-    end:"05/2028",
-    afhankelijk:"start fase 2 gereed"
-  },
-  {
-    id:4,
-    name:"Bauabschnitt 4",
-    plan:"planstraße d teil 2",
-    start:"na BA3",
-    end:"05/2028",
-    afhankelijk:"na Bauabschnitt 3"
+// ===== PDF =====
+function loadScript(url){
+  return new Promise(res=>{
+    let s=document.createElement("script");
+    s.src=url;
+    s.onload=res;
+    document.body.appendChild(s);
+  });
+}
+
+async function handlePDF(file){
+  try {
+    if(typeof pdfjsLib==="undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    }
+
+    let reader=new FileReader();
+
+    reader.onload=async function(){
+      let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text="";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page=await pdf.getPage(i);
+        let c=await page.getTextContent();
+        text+=c.items.map(i=>i.str).join(" ")+"\n";
+      }
+
+      document.getElementById("lvText").value=text;
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  } catch(e){
+    alert("PDF fout: " + e);
   }
+}
+
+document.getElementById("pdfFile").onchange = function(e){
+  if(e.target.files[0]) handlePDF(e.target.files[0]);
+};
+
+// ===== JOUW ECHTE PLANNING =====
+const fases = [
+  {name:"Bauabschnitt 1", plan:"Planstraße C", start:"06/2026", end:"07/2027"},
+  {name:"Bauabschnitt 2", plan:"Planstraße E", start:"na BA1", end:"07/2027"},
+  {name:"Bauabschnitt 3", plan:"Planstraße D Teil 1", start:"08/2027", end:"05/2028"},
+  {name:"Bauabschnitt 4", plan:"Planstraße D Teil 2", start:"na BA3", end:"05/2028"}
 ];
 
-// ===== TEKST PER FASE =====
-function getPhaseText(text, fase){
-  let idx = text.indexOf(fase.plan);
+// ===== VEILIGE TEKST MATCH =====
+function getPhaseText(text, plan){
+  let idx = text.indexOf(plan.toLowerCase());
   if(idx === -1) return "";
-  return text.substring(idx, idx + 2000);
+  return text.substring(idx, idx + 1500);
 }
 
 // ===== WERKZAAMHEDEN =====
 function extractWork(text){
 
-  let lines = text.split(".");
+  if(!text) return "<li>Complete civiele uitvoering (riolering, nuts, bouwwegen)</li>";
 
-  return lines
-    .filter(l =>
+  let parts = text.split(".");
+  let res = [];
+
+  for(let i=0;i<parts.length;i++){
+    let l = parts[i];
+
+    if(
       l.includes("kanal") ||
-      l.includes("verlegen") ||
-      l.includes("herstellen") ||
       l.includes("erschließ") ||
       l.includes("versorgung") ||
       l.includes("baustra")
-    )
-    .slice(0,6)
-    .map(l => `<li>${l.trim()}</li>`)
-    .join("");
+    ){
+      res.push("<li>"+l.trim()+"</li>");
+    }
+  }
+
+  if(res.length === 0){
+    return "<li>Complete civiele uitvoering (riolering, nuts, bouwwegen)</li>";
+  }
+
+  return res.slice(0,5).join("");
 }
 
 // ===== RISICO =====
 function risico(f){
-
   return `
   <ul>
-    <li class="high">Strikte einddatum (${f.end}) contractueel vastgelegd</li>
-    <li class="high">Geen parallel uitvoering toegestaan → volledig kritieke keten</li>
-    <li class="high">Directe afhankelijkheid van voorgaande fase (${f.afhankelijk})</li>
-    <li class="mid">Continuïteit vereist (geen onderbreking toegestaan)</li>
-    <li class="mid">Afstemming nutsbedrijven noodzakelijk</li>
+    <li class="high">Geen parallel uitvoering toegestaan</li>
+    <li class="high">Strikte einddatum (${f.end})</li>
+    <li class="high">Volledig afhankelijk van vorige fase</li>
+    <li class="mid">Continu doorwerken vereist</li>
   </ul>
   `;
 }
 
-// ===== STERKE SAMENVATTING =====
+// ===== SAMENVATTING =====
 function summary(f){
-
   return `
   <p>
-  ${f.name} (${f.plan.toUpperCase()}) betreft een volledig gedefinieerde uitvoeringsfase binnen het project,
-  waarbij alle civiele werkzaamheden integraal worden uitgevoerd.
+  ${f.name} (${f.plan}) is een kritische uitvoeringsfase binnen het project.
+  De werkzaamheden omvatten volledige civiele aanleg inclusief riolering,
+  nutsvoorzieningen en bouwwegen.
   </p>
 
   <p>
-  De werkzaamheden omvatten de volledige aanleg van riolering, nutsvoorzieningen en tijdelijke infrastructuur.
-  Deze werkzaamheden moeten zonder onderbreking worden uitgevoerd, wat betekent dat planning, personeel en materiaal
-  continu beschikbaar moeten zijn.
-  </p>
-
-  <p>
-  De fase is direct afhankelijk van de voorgaande fase (${f.afhankelijk}), waardoor een lineaire uitvoeringsstructuur ontstaat.
-  Dit betekent dat vertraging in één fase direct doorwerkt in de rest van het project.
-  </p>
-
-  <p>
-  Aangezien parallel werken expliciet is uitgesloten in het contract, ontstaat een volledig kritieke planning zonder buffer.
-  Hierdoor is het project zeer gevoelig voor verstoringen.
+  De uitvoering moet zonder onderbreking plaatsvinden en is volledig afhankelijk
+  van de voorgaande fase. Hierdoor ontstaat een lineaire planning zonder buffer.
   </p>
 
   <p class="high">
-  Conclusie: ${f.name} ligt op het kritieke pad en vereist continue uitvoering, strakke regie en actieve risicobeheersing.
+  Conclusie: vertraging = directe projectvertraging.
   </p>
   `;
 }
 
-// ===== KRITIEKE PAD BLOK =====
-function criticalPath(){
-
+// ===== KRITIEKE PAD =====
+function criticalBlock(){
   return `
   <div class="section">
-    <h2>Kritieke Pad Analyse</h2>
-
-    <p>
-    Alle Bauabschnitte worden sequentieel uitgevoerd zonder mogelijkheid tot parallel werken.
-    Dit betekent dat de volledige planning één doorlopende kritieke keten vormt.
-    </p>
-
-    <p>
-    Kritieke volgorde:
-    <br>BA1 → BA2 → BA3 → BA4
-    </p>
-
-    <p class="high">
-    Vertraging in één fase leidt direct tot vertraging van het gehele project.
-    Er is geen tijdsbuffer aanwezig.
-    </p>
+    <h2>Kritieke Pad</h2>
+    <p>BA1 → BA2 → BA3 → BA4</p>
+    <p class="high">Geen buffer – alles kritisch</p>
   </div>
   `;
 }
@@ -135,39 +173,46 @@ function criticalPath(){
 // ===== MAIN =====
 function analyse(){
 
-  let text = lvText.value.toLowerCase();
+  try {
 
-  out.innerHTML = `
+    let text = document.getElementById("lvText").value.toLowerCase();
 
-    ${criticalPath()}
+    let html = criticalBlock();
 
-    ${fases.map(f=>{
+    for(let i=0;i<fases.length;i++){
 
-      let t = getPhaseText(text, f);
+      let f = fases[i];
+      let t = getPhaseText(text, f.plan);
       let work = extractWork(t);
 
-      return `
+      html += `
       <div class="section">
 
-        <h2>${f.name} – ${f.plan.toUpperCase()}</h2>
+        <h2>${f.name} – ${f.plan}</h2>
 
-        <h3>Periode (contractueel)</h3>
+        <h3>Periode</h3>
         <p><b>${f.start} → ${f.end}</b></p>
 
         ${summary(f)}
 
         <h3>Werkzaamheden</h3>
-        <ul>${work || "<li>Complete civiele uitvoering (riolering, nuts, bouwwegen)</li>"}</ul>
+        <ul>${work}</ul>
 
         <h3>Risico’s</h3>
         ${risico(f)}
 
       </div>
       `;
+    }
 
-    }).join("")}
+    document.getElementById("out").innerHTML = html;
 
-  `;
+  } catch(e){
+    document.getElementById("out").innerHTML = "<div class='section high'>Fout: "+e+"</div>";
+  }
 }
 
 </script>
+
+</body>
+</html>
