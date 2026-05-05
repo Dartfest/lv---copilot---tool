@@ -1,136 +1,70 @@
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-<meta charset="UTF-8">
-<title>LV Intelligence – Pro Phase + Material Engine</title>
-
-<style>
-body { font-family: Arial; margin:0; background:#eef2f7; }
-.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
-.container { padding:20px; }
-
-textarea { width:100%; height:120px; margin-bottom:10px; }
-
-button {
-  padding:8px 12px;
-  background:#2563eb;
-  color:#fff;
-  border:none;
-  cursor:pointer;
-}
-
-.card { background:#fff; padding:15px; border-radius:6px; margin-bottom:12px; }
-
-.high { color:#dc2626; }
-.mid { color:#f59e0b; }
-
-.section {
-  background:#fff;
-  padding:15px;
-  margin-top:12px;
-  border-radius:8px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="header">LV Intelligence – Advanced Analyse Tool</div>
-
-<div class="container">
-
-<input type="file" id="pdfFile" accept=".pdf"><br><br>
-
-<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
-
-<button onclick="analyse()">Analyse</button>
-
-<div id="out"></div>
-
-</div>
-
 <script>
 
-// ===== PDF =====
-function loadScript(url){
-  return new Promise(res=>{
-    let s=document.createElement("script");
-    s.src=url;
-    s.onload=res;
-    document.body.appendChild(s);
-  });
-}
+// ===== PARSE EXACTE STRUCTUUR =====
+function parsePhases(t){
 
-async function handlePDF(file){
-  if(typeof pdfjsLib==="undefined"){
-    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+  let regex = /(\d)\.\s*bauabschnitt:\s*planstraße\s*([a-z]).*?(teil\s*\d)?/gi;
+  let phases = [];
+  let m;
+
+  while((m = regex.exec(t))){
+
+    let nr = m[1];
+    let plan = m[2].toUpperCase();
+    let teil = m[3] ? m[3].toUpperCase() : "";
+
+    let name = `Bauabschnitt ${nr} - Planstraße ${plan} ${teil}`;
+
+    phases.push({
+      nr: parseInt(nr),
+      plan,
+      teil,
+      name
+    });
   }
 
-  let reader=new FileReader();
-
-  reader.onload=async function(){
-    let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-    let text="";
-
-    for(let i=1;i<=pdf.numPages;i++){
-      let page=await pdf.getPage(i);
-      let c=await page.getTextContent();
-      text+=c.items.map(i=>i.str).join(" ")+"\n";
-    }
-
-    lvText.value=text;
-  };
-
-  reader.readAsArrayBuffer(file);
+  return phases.sort((a,b)=>a.nr - b.nr);
 }
 
-pdfFile.onchange=e=>{
-  if(e.target.files[0]) handlePDF(e.target.files[0]);
-};
+// ===== SPLIT TEKST PER FASE =====
+function splitPerPhase(t, phases){
 
-// ===== PLANSTRASSE DETECTIE =====
-function detectPlanstrassen(t){
-  let m = t.match(/planstraße\s*[a-z]/gi) || [];
-  return [...new Set(m.map(x=>x.toUpperCase()))];
-}
+  let result = [];
 
-// ===== TEKST PER FASE SPLITSEN =====
-function splitPerPlan(t, plans){
+  phases.forEach((p,i)=>{
 
-  let result = {};
+    let startIndex = t.toLowerCase().indexOf(p.plan.toLowerCase());
+    let endIndex = i < phases.length-1 
+      ? t.toLowerCase().indexOf(phases[i+1].plan.toLowerCase())
+      : t.length;
 
-  plans.forEach(p=>{
-    let regex = new RegExp(p.toLowerCase() + "[\\s\\S]*?(?=planstraße|$)", "gi");
-    let match = t.match(regex);
+    let sub = t.substring(startIndex, endIndex);
 
-    result[p] = match ? match.join(" ") : t;
+    result.push({...p, text: sub});
   });
 
   return result;
 }
 
-// ===== MATERIAAL HERKENNING =====
+// ===== MATERIAAL =====
 function extractMaterials(text){
 
   let matches = text.match(/(dn\s*\d+).*?(pvc|pe|stahl|guss|rohr|leitung)?/gi) || [];
-
   let map = {};
 
   matches.forEach(m=>{
-
-    let dn = (m.match(/dn\s*\d+/i) || [""])[0].toUpperCase();
-    let type = (m.match(/pvc|pe|stahl|guss|rohr|leitung/i) || ["Onbekend"])[0];
-
+    let dn = (m.match(/dn\s*\d+/i)||[""])[0].toUpperCase();
+    let type = (m.match(/pvc|pe|stahl|guss|rohr|leitung/i)||["Onbekend"])[0];
     let key = dn + " " + type;
 
-    map[key] = (map[key] || 0) + 1;
+    map[key] = (map[key]||0)+1;
   });
 
   return map;
 }
 
-// ===== RISICO PER FASE =====
-function risicoAnalyse(text){
+// ===== RISICO =====
+function analyseRisico(text){
 
   let r=[], k=[];
 
@@ -141,7 +75,7 @@ function risicoAnalyse(text){
 
   if(text.includes("unterbrechung")){
     r.push("Onderbreking mogelijk");
-    k.push("Stilstand tussen werkzaamheden");
+    k.push("Stilstand tussen fases");
   }
 
   if(text.includes("drittfirmen")){
@@ -151,32 +85,31 @@ function risicoAnalyse(text){
 
   if(text.includes("nicht vergütet")){
     r.push("Niet vergoede werkzaamheden");
-    k.push("Kosten liggen bij aannemer");
+    k.push("Kosten bij aannemer");
   }
 
   return {r,k};
 }
 
 // ===== GROTE SAMENVATTING =====
-function bigSummary(plan, text){
+function bigSummary(p){
 
   return `
-  De fase ${plan} vormt een integraal onderdeel van de totale projectuitvoering en is bepalend voor de voortgang van het werk. 
-  Binnen deze fase worden essentiële werkzaamheden uitgevoerd die direct aansluiten op voorgaande en opvolgende fases.
+  ${p.name} vormt een essentiële fase binnen het project en bepaalt de voortgang van de totale uitvoering.
 
-  De uitvoering binnen deze fase is sterk afhankelijk van de algemene projectfasering en dient in een logische volgorde plaats te vinden. 
-  Door contractuele beperkingen, zoals het ontbreken van parallelle uitvoering, ontstaat een verhoogde druk op de planning en doorlooptijd.
+  Deze fase is gepositioneerd als stap ${p.nr} binnen de fasering en kan pas starten na afronding van de voorgaande fase.
+  Hierdoor ontstaat een kettingreactie waarbij vertraging direct effect heeft op de totale planning.
 
-  Daarnaast speelt de afhankelijkheid van externe partijen een belangrijke rol. 
-  Werkzaamheden van nutsbedrijven en andere derden kunnen directe invloed hebben op de voortgang en vereisen intensieve coördinatie.
+  Binnen deze fase worden werkzaamheden uitgevoerd aan ${p.plan}, 
+  waarbij de uitvoering afhankelijk is van zowel interne planning als externe partijen.
 
-  Vanuit financieel perspectief moet rekening worden gehouden met werkzaamheden die mogelijk niet afzonderlijk worden vergoed. 
-  Dit vraagt om een nauwkeurige werkvoorbereiding en kostenbewaking.
+  Contractueel is de uitvoering beperkt door fasering en mogelijk ontbreken van parallelle werkzaamheden, 
+  wat leidt tot verhoogde druk op doorlooptijd en uitvoering.
 
-  De combinatie van fasering, afhankelijkheden en contractuele bepalingen maakt deze fase kritisch binnen het totale project.
+  Indien sprake is van deeluitvoering (${p.teil || "geen opsplitsing"}), 
+  vereist dit extra coördinatie binnen dezelfde planstraat.
 
-  Conclusie: succesvolle uitvoering van ${plan} vereist een gedetailleerde voorbereiding, strakke planning, 
-  continue afstemming en actieve risicobeheersing.
+  Conclusie: deze fase vraagt om strakke planning, goede voorbereiding en actieve sturing op risico’s en uitvoering.
   `;
 }
 
@@ -186,23 +119,20 @@ function analyse(){
   let t = lvText.value.toLowerCase();
   if(!t) return;
 
-  let plans = detectPlanstrassen(t);
-  let split = splitPerPlan(t, plans);
+  let phases = parsePhases(t);
+  let split = splitPerPhase(t, phases);
 
-  out.innerHTML = `
+  out.innerHTML = split.map(p=>{
 
-  ${plans.map(p=>{
-
-    let txt = split[p];
-    let mat = extractMaterials(txt);
-    let ris = risicoAnalyse(txt);
+    let mat = extractMaterials(p.text);
+    let ris = analyseRisico(p.text);
 
     return `
     <div class="section">
 
-      <h2>${p}</h2>
+      <h2>${p.name}</h2>
 
-      <p>${bigSummary(p, txt)}</p>
+      <p>${bigSummary(p)}</p>
 
       <h3>Risico’s</h3>
       <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
@@ -218,12 +148,7 @@ function analyse(){
     </div>
     `;
 
-  }).join("")}
-
-  `;
+  }).join("");
 }
 
 </script>
-
-</body>
-</html>
