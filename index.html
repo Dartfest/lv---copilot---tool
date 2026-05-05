@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Directie Analyse</title>
+<title>LV Intelligence – Complete Tool</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,6 +17,7 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
+  margin-top:5px;
 }
 
 .section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
@@ -25,29 +26,33 @@ button {
 .mid { color:#f59e0b; }
 
 ul { margin-top:5px; }
+
+.oz { background:#f9fafb; padding:8px; margin-top:5px; border-radius:6px; }
 </style>
 </head>
 
 <body>
 
-<div class="header">LV Intelligence – Directie Analyse</div>
+<div class="header">LV Intelligence – Directie Analyse + OZ Export</div>
 
 <div class="container">
 
-<!-- ✅ UPLOAD KNOP -->
 <input type="file" id="pdfFile" accept=".pdf"><br><br>
 
 <textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="analyse()">Analyse</button>
+<button onclick="extractOZ()">Genereer OZ lijst</button>
+<button onclick="exportOZ()">Export OZ (.txt)</button>
 
 <div id="out"></div>
+<div id="ozOut"></div>
 
 </div>
 
 <script>
 
-// ===== PDF SCRIPT LOADER =====
+// ===== PDF =====
 function loadScript(url){
   return new Promise(res=>{
     let s=document.createElement("script");
@@ -57,89 +62,51 @@ function loadScript(url){
   });
 }
 
-// ===== PDF INLEZEN =====
 async function handlePDF(file){
-
   try{
-
-    if(typeof pdfjsLib === "undefined"){
+    if(typeof pdfjsLib==="undefined"){
       await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
     }
 
-    let reader = new FileReader();
+    let reader=new FileReader();
 
-    reader.onload = async function(){
-
-      let pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-      let text = "";
+    reader.onload=async function(){
+      let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text="";
 
       for(let i=1;i<=pdf.numPages;i++){
-        let page = await pdf.getPage(i);
-        let content = await page.getTextContent();
-        text += content.items.map(i=>i.str).join(" ") + "\n";
+        let page=await pdf.getPage(i);
+        let c=await page.getTextContent();
+        text+=c.items.map(i=>i.str).join(" ")+"\n";
       }
 
-      document.getElementById("lvText").value = text;
-
+      lvText.value=text;
     };
 
     reader.readAsArrayBuffer(file);
 
-  } catch(e){
-    alert("PDF laden mislukt: " + e);
+  }catch(e){
+    alert("PDF fout: "+e);
   }
 }
 
-// ===== UPLOAD EVENT =====
-document.getElementById("pdfFile").onchange = function(e){
+pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
 // ===== FASES =====
 const fases = [
-  {
-    name:"Bauabschnitt 1",
-    plan:"Planstraße C",
-    periode:"06/2026 → 07/2027"
-  },
-  {
-    name:"Bauabschnitt 2",
-    plan:"Planstraße E",
-    periode:"aansluitend → 07/2027"
-  },
-  {
-    name:"Bauabschnitt 3",
-    plan:"Planstraße D Teil 1",
-    periode:"08/2027 → 05/2028"
-  },
-  {
-    name:"Bauabschnitt 4",
-    plan:"Planstraße D Teil 2",
-    periode:"aansluitend → 05/2028"
-  }
+  {name:"Bauabschnitt 1", plan:"Planstraße C", periode:"06/2026 → 07/2027"},
+  {name:"Bauabschnitt 2", plan:"Planstraße E", periode:"aansluitend → 07/2027"},
+  {name:"Bauabschnitt 3", plan:"Planstraße D Teil 1", periode:"08/2027 → 05/2028"},
+  {name:"Bauabschnitt 4", plan:"Planstraße D Teil 2", periode:"aansluitend → 05/2028"}
 ];
 
 // ===== SAMENVATTING =====
 function summary(f){
 return `
-<p>
-${f.name} (${f.plan}) betreft een volledig uitvoeringsdeel van het project waarbij alle civieltechnische werkzaamheden integraal worden uitgevoerd.
-Binnen deze fase worden rioleringssystemen, nutsvoorzieningen en tijdelijke infrastructuur gerealiseerd.
-</p>
-
-<p>
-De werkzaamheden moeten aaneengesloten worden uitgevoerd zonder onderbreking.
-Dit betekent dat personeel, materieel en materiaal continu beschikbaar moeten zijn gedurende de uitvoering.
-</p>
-
-<p>
-De fase is direct afhankelijk van de voorgaande fase en maakt onderdeel uit van een lineaire planning.
-Parallel werken is contractueel uitgesloten, waardoor iedere vertraging directe impact heeft op de totale projectplanning.
-</p>
-
-<p class="high">
-Conclusie: deze fase ligt op het kritieke pad en vereist strakke planning, continue uitvoering en intensieve coördinatie.
-</p>
+<p>${f.name} (${f.plan}) betreft een volledige uitvoeringsfase inclusief riolering, nuts en infrastructuur.</p>
+<p class="high">Kritische fase zonder buffer.</p>
 `;
 }
 
@@ -147,12 +114,11 @@ Conclusie: deze fase ligt op het kritieke pad en vereist strakke planning, conti
 function werkzaamheden(){
 return `
 <ul>
-<li>Aanleg rioleringssystemen (kanaalbouw)</li>
-<li>Uitvoering nutsvoorzieningen (water, elektra, telecom)</li>
-<li>Aanleg bouwwegen (Baustraßen)</li>
-<li>Grondwerk en sleufwerkzaamheden</li>
-<li>Aansluitingen op bestaande netwerken</li>
-<li>Afwerking en oplevering</li>
+<li>Riolering (kanaalbouw)</li>
+<li>Nutsvoorzieningen</li>
+<li>Bouwwegen</li>
+<li>Grondwerk</li>
+<li>Aansluitingen</li>
 </ul>
 `;
 }
@@ -161,59 +127,93 @@ return `
 function risico(f){
 return `
 <ul>
-<li class="high">Geen parallel uitvoering mogelijk → volledige afhankelijkheid</li>
-<li class="high">Strikte einddatum (${f.periode})</li>
-<li class="high">Geen onderbreking toegestaan → hoge uitvoeringsdruk</li>
-<li class="mid">Afhankelijkheid van nutsbedrijven</li>
-<li class="mid">Logistieke beperkingen</li>
+<li class="high">Geen parallel uitvoering</li>
+<li class="high">Strikte deadline (${f.periode})</li>
+<li class="mid">Afhankelijk derden</li>
 </ul>
 `;
 }
 
-// ===== KRITIEKE PAD =====
-function critical(){
-return `
-<div class="section">
-<h2>Kritieke Pad</h2>
-
-<p><b>BA1 → BA2 → BA3 → BA4</b></p>
-
-<p class="high">
-Volledig sequentieel – geen parallel uitvoering mogelijk.
-Elke vertraging werkt direct door in het hele project.
-</p>
-</div>
-`;
-}
-
-// ===== MAIN =====
+// ===== ANALYSE =====
 function analyse(){
 
-  let html = critical();
+  let html = `
+  <div class="section">
+  <h2>Kritieke Pad</h2>
+  <p class="high">BA1 → BA2 → BA3 → BA4</p>
+  </div>
+  `;
 
   fases.forEach(f=>{
-
     html += `
     <div class="section">
-
       <h2>${f.name} – ${f.plan}</h2>
-
-      <h3>Periode</h3>
       <p><b>${f.periode}</b></p>
-
       ${summary(f)}
-
       <h3>Werkzaamheden</h3>
       ${werkzaamheden()}
-
       <h3>Risico’s</h3>
       ${risico(f)}
-
     </div>
     `;
   });
 
-  document.getElementById("out").innerHTML = html;
+  out.innerHTML = html;
+}
+
+// ===== OZ EXTRACT =====
+let ozData = [];
+
+function extractOZ(){
+
+  let text = lvText.value;
+
+  let lines = text.split("\n");
+
+  ozData = lines.filter(l => l.match(/oz\s*\d+/i));
+
+  let html = `
+  <div class="section">
+  <h2>OZ Lijst + Vertaling</h2>
+  `;
+
+  ozData.forEach(l=>{
+
+    let nl = l
+      .replace(/kanal/gi,"riolering")
+      .replace(/leitung/gi,"leiding")
+      .replace(/verlegen/gi,"aanleggen")
+      .replace(/herstellen/gi,"realiseren");
+
+    html += `
+      <div class="oz">
+        <b>${l}</b><br>
+        ${nl}
+      </div>
+    `;
+  });
+
+  html += "</div>";
+
+  ozOut.innerHTML = html;
+}
+
+// ===== EXPORT =====
+function exportOZ(){
+
+  if(ozData.length === 0){
+    alert("Geen OZ data");
+    return;
+  }
+
+  let content = ozData.join("\n");
+
+  let blob = new Blob([content], {type:"text/plain"});
+  let a = document.createElement("a");
+
+  a.href = URL.createObjectURL(blob);
+  a.download = "OZ_lijst.txt";
+  a.click();
 }
 
 </script>
