@@ -2,35 +2,35 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Complete Tool</title>
+<title>LV Intelligence – Directie Analyse</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
 .header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
 .container { padding:20px; }
 
-textarea { width:100%; height:120px; margin-bottom:10px; }
+textarea { width:100%; height:140px; margin-bottom:10px; }
 
 button {
-  padding:8px 12px;
+  padding:10px 15px;
   background:#2563eb;
   color:#fff;
   border:none;
   cursor:pointer;
-  margin-top:5px;
 }
 
-.section { background:#fff; padding:15px; margin-top:12px; border-radius:8px; }
-.card { background:#f9fafb; padding:10px; margin-top:8px; border-radius:6px; }
+.section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
 
 .high { color:#dc2626; }
 .mid { color:#f59e0b; }
+
+.card { background:#f9fafb; padding:10px; margin-top:8px; border-radius:6px; }
 </style>
 </head>
 
 <body>
 
-<div class="header">LV Intelligence – Complete Analyse Tool</div>
+<div class="header">LV Intelligence – Directie Analyse</div>
 
 <div class="container">
 
@@ -46,7 +46,7 @@ button {
 
 <script>
 
-// ===== PDF SCRIPT LOADER =====
+// ===== PDF =====
 function loadScript(url){
   return new Promise(res=>{
     let s=document.createElement("script");
@@ -56,259 +56,146 @@ function loadScript(url){
   });
 }
 
-// ===== PDF LEZEN =====
 async function handlePDF(file){
 
-  try {
+  if(typeof pdfjsLib==="undefined"){
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+  }
 
-    if(typeof pdfjsLib === "undefined"){
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+  let reader=new FileReader();
+
+  reader.onload=async function(){
+    let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+    let text="";
+
+    for(let i=1;i<=pdf.numPages;i++){
+      let page=await pdf.getPage(i);
+      let c=await page.getTextContent();
+      text+=c.items.map(i=>i.str).join(" ")+"\n";
     }
 
-    let reader = new FileReader();
+    lvText.value=text;
+  };
 
-    reader.onload = async function(){
-
-      let pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-      let text = "";
-
-      for(let i=1;i<=pdf.numPages;i++){
-        let page = await pdf.getPage(i);
-        let content = await page.getTextContent();
-        text += content.items.map(i=>i.str).join(" ") + "\n";
-      }
-
-      lvText.value = text;
-
-    };
-
-    reader.readAsArrayBuffer(file);
-
-  } catch(e){
-    alert("PDF laden mislukt: " + e);
-  }
+  reader.readAsArrayBuffer(file);
 }
 
-pdfFile.onchange = e=>{
+pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
-// ===== STRUCTUUR =====
-function buildStructure(t){
+// ===== JOUW STRUCTUUR =====
+const fases = [
+  {id:1, name:"Bauabschnitt 1", plan:"Planstraße C"},
+  {id:2, name:"Bauabschnitt 2", plan:"Planstraße E"},
+  {id:3, name:"Bauabschnitt 3", plan:"Planstraße D Teil 1"},
+  {id:4, name:"Bauabschnitt 4", plan:"Planstraße D Teil 2"}
+];
 
-  let lines = t.split("\n");
-  let result = [];
+// ===== FILTER TEKST PER FASE =====
+function getPhaseText(text, fase){
 
-  lines.forEach(line=>{
+  let start = text.indexOf(fase.plan.toLowerCase());
+  if(start === -1) return "";
 
-    let m = line.match(/(\d+)\.\s*bauabschnitt.*?planstraße\s*([a-z]).*?(teil\s*\d)?/i);
-
-    if(m){
-      result.push({
-        nr: parseInt(m[1]),
-        name: `Bauabschnitt ${m[1]}`,
-        plan: `Planstraße ${m[2].toUpperCase()} ${m[3] ? m[3].toUpperCase() : ""}`,
-        text: line.toLowerCase()
-      });
-    }
-
-  });
-
-  if(result.length === 0){
-    result.push({
-      nr:1,
-      name:"Project (geen fases gevonden)",
-      plan:"-",
-      text:t
-    });
-  }
-
-  return result.sort((a,b)=>a.nr-b.nr);
+  return text.substring(start, start + 1500); // context
 }
 
-// ===== MATERIAAL =====
+// ===== BESTELLIJST =====
 function extractMaterials(text){
 
-  let matches = text.match(/(dn\s*\d+).*?(pvc|pe|stahl|guss|rohr|leitung)?/gi) || [];
-  let map = {};
+  let results = {};
 
-  matches.forEach(m=>{
-    let dn = (m.match(/dn\s*\d+/i)||[""])[0].toUpperCase();
-    let type = (m.match(/pvc|pe|stahl|guss|rohr|leitung/i)||["Onbekend"])[0];
-    let key = dn + " " + type;
+  let regex = /(\d+)\s*(m2|m¹|m)?[^a-zA-Z0-9]*(dn\s*\d+)[^a-zA-Z0-9]*(stahl|pvc|pe)?/gi;
 
-    map[key] = (map[key]||0)+1;
-  });
+  let m;
+  while((m = regex.exec(text))){
 
-  return map;
+    let hoeveelheid = m[1];
+    let unit = m[2] || "st";
+    let dn = m[3].toUpperCase();
+    let mat = (m[4] || "onbekend");
+
+    let key = `${dn} ${mat}`;
+
+    results[key] = results[key] || {qty:0, unit};
+    results[key].qty += parseInt(hoeveelheid);
+  }
+
+  return results;
 }
 
 // ===== RISICO =====
-function analyseRisico(text){
-
-  let r=[], k=[];
-
-  if(text.includes("nicht parallel")){
-    r.push("Geen parallel uitvoering mogelijk");
-    k.push("Fases blokkeren elkaar");
-  }
-
-  if(text.includes("unterbrechung")){
-    r.push("Onderbreking mogelijk");
-    k.push("Stilstand tussen fases");
-  }
-
-  if(text.includes("drittfirmen")){
-    r.push("Afhankelijkheid derden");
-    k.push("Planning afhankelijk van nutsbedrijven");
-  }
-
-  if(text.includes("nicht vergütet")){
-    r.push("Niet vergoede werkzaamheden");
-    k.push("Kosten bij aannemer");
-  }
-
-  return {r,k};
-}
-
-// ===== SAMENVATTING =====
-function summary(b){
+function risico(text){
 
   return `
-  ${b.name} omvat werkzaamheden binnen ${b.plan} en vormt een essentiële schakel binnen de projectfasering.
-
-  Deze fase kan pas starten na afronding van voorgaande fases en bepaalt daarmee direct de voortgang van het project.
-  Door de sequentiële uitvoering is vertraging direct van invloed op de einddatum.
-
-  Binnen deze fase spelen logistiek, bereikbaarheid en coördinatie met derden een belangrijke rol.
-  Bij opsplitsing in delen (bijv. Teil 1 / Teil 2) neemt de complexiteit verder toe.
-
-  Contractuele voorwaarden zoals fasering en afhankelijkheden vergroten het uitvoeringsrisico.
-
-  Conclusie: ${b.name} is kritisch en vereist strakke planning en actieve sturing.
+  <ul>
+    <li class="high">Planning: fasering dwingt sequentiële uitvoering → geen buffer</li>
+    <li class="high">Uitvoering: afhankelijkheid derden (nutsbedrijven)</li>
+    <li class="mid">Contract: mogelijk niet vergoede werkzaamheden</li>
+    <li class="mid">Technisch: kans op onderbrekingen en afstemming issues</li>
+  </ul>
   `;
 }
 
-// ===== PLANNING =====
-function buildPlanning(phases){
-
-  let current = 0;
-
-  return phases.map(p=>{
-
-    let duur = 6;
-
-    let start = current;
-    let end = start + duur;
-
-    current = end;
-
-    return {
-      ...p,
-      start,
-      end,
-      duur,
-      kritisch: true
-    };
-
-  });
-}
-
-// ===== DATUM =====
-function format(v){
-  let y = Math.floor(v/12);
-  let m = v % 12;
-  return `${m}/${y}`;
-}
-
-// ===== GANTT =====
-function buildGantt(phases){
-
-  let max = Math.max(...phases.map(p=>p.end));
+// ===== GROTE SAMENVATTING =====
+function summary(f){
 
   return `
-  <div class="section">
-    <h2>Planning + Kritieke Pad</h2>
+  <p>
+  ${f.name} (${f.plan}) vormt een cruciale fase binnen het project en bepaalt direct de voortgang van de totale uitvoering.
+  Binnen deze fase worden werkzaamheden uitgevoerd die niet los gezien kunnen worden van voorgaande en opvolgende fases.
+  </p>
 
-    ${phases.map(p=>{
+  <p>
+  De uitvoering is volledig afhankelijk van een gefaseerde aanpak, waarbij werkzaamheden in volgorde moeten plaatsvinden.
+  Hierdoor ontstaat een kritieke keten zonder flexibiliteit, wat betekent dat elke vertraging directe impact heeft op de totale planning.
+  </p>
 
-      let left = (p.start / max) * 100;
-      let width = (p.duur / max) * 100;
+  <p>
+  Binnen deze fase spelen logistiek, bereikbaarheid en coördinatie met derden een belangrijke rol.
+  Werkzaamheden moeten nauwkeurig worden afgestemd met externe partijen zoals nutsbedrijven.
+  </p>
 
-      return `
-      <div style="margin-bottom:10px">
+  <p>
+  Contractueel gezien kunnen beperkingen zoals niet-parallel werken en mogelijke niet-vergoede werkzaamheden leiden tot financiële risico’s.
+  </p>
 
-        <b>${p.name} - ${p.plan}</b> 
-        <span class="high">(Kritiek)</span><br>
-
-        ${format(p.start)} → ${format(p.end)} (${p.duur} mnd)
-
-        <div style="background:#ddd;height:20px;position:relative;border-radius:4px;">
-          <div style="
-            position:absolute;
-            left:${left}%;
-            width:${width}%;
-            height:100%;
-            background:#dc2626;
-            border-radius:4px;
-          "></div>
-        </div>
-
-      </div>
-      `;
-    }).join("")}
-
-  </div>
+  <p class="high">
+  Conclusie: deze fase is kritisch en vereist strakke voorbereiding, continue monitoring en actieve sturing.
+  </p>
   `;
 }
 
 // ===== MAIN =====
 function analyse(){
 
-  try {
+  let text = lvText.value.toLowerCase();
 
-    let t = lvText.value.toLowerCase();
-    if(!t) return;
+  out.innerHTML = fases.map(f=>{
 
-    let structure = buildStructure(t);
-    let planning = buildPlanning(structure);
+    let t = getPhaseText(text, f);
+    let mat = extractMaterials(t);
 
-    out.innerHTML = `
+    return `
+    <div class="section">
 
-      ${buildGantt(planning)}
+      <h2>${f.name} – ${f.plan}</h2>
 
-      ${planning.map(b=>{
+      ${summary(f)}
 
-        let ris = analyseRisico(b.text);
-        let mat = extractMaterials(b.text);
+      <h3>Risico’s</h3>
+      ${risico(t)}
 
-        return `
-        <div class="section">
+      <h3>Bestellijst</h3>
 
-          <h2>${b.name} - ${b.plan}</h2>
+      ${Object.entries(mat).map(([k,v])=>`
+        <div class="card">${k} → ${v.qty} ${v.unit}</div>
+      `).join("") || "Geen materiaal gedetecteerd"}
 
-          <p>${summary(b)}</p>
-
-          <h3>Risico’s</h3>
-          <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
-
-          <h3>Knelpunten</h3>
-          <ul>${ris.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
-
-          <h3>Bestellijst</h3>
-          ${Object.entries(mat).map(([k,v])=>`
-            <div class="card">${k} → ${v}x</div>
-          `).join("")}
-
-        </div>
-        `;
-      }).join("")}
-
+    </div>
     `;
-
-  } catch(e){
-    out.innerHTML = `<div class="section high">Fout: ${e}</div>`;
-  }
+  }).join("");
 }
 
 </script>
