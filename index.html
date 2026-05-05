@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Ultimate Engine</title>
+<title>LV Intelligence – Pro Phase + Material Engine</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -35,7 +35,7 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Ultimate Analyse Tool</div>
+<div class="header">LV Intelligence – Advanced Analyse Tool</div>
 
 <div class="container">
 
@@ -88,48 +88,68 @@ pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
-// ===== PLANSTRASSE =====
+// ===== PLANSTRASSE DETECTIE =====
 function detectPlanstrassen(t){
   let m = t.match(/planstraße\s*[a-z]/gi) || [];
   return [...new Set(m.map(x=>x.toUpperCase()))];
 }
 
-// ===== BESTELLIJST =====
-function extractMaterials(t){
+// ===== TEKST PER FASE SPLITSEN =====
+function splitPerPlan(t, plans){
 
-  let matches = t.match(/dn\s*\d+/gi) || [];
+  let result = {};
+
+  plans.forEach(p=>{
+    let regex = new RegExp(p.toLowerCase() + "[\\s\\S]*?(?=planstraße|$)", "gi");
+    let match = t.match(regex);
+
+    result[p] = match ? match.join(" ") : t;
+  });
+
+  return result;
+}
+
+// ===== MATERIAAL HERKENNING =====
+function extractMaterials(text){
+
+  let matches = text.match(/(dn\s*\d+).*?(pvc|pe|stahl|guss|rohr|leitung)?/gi) || [];
 
   let map = {};
 
   matches.forEach(m=>{
-    let key = m.toUpperCase();
+
+    let dn = (m.match(/dn\s*\d+/i) || [""])[0].toUpperCase();
+    let type = (m.match(/pvc|pe|stahl|guss|rohr|leitung/i) || ["Onbekend"])[0];
+
+    let key = dn + " " + type;
+
     map[key] = (map[key] || 0) + 1;
   });
 
   return map;
 }
 
-// ===== RISICO =====
-function getRisico(t){
+// ===== RISICO PER FASE =====
+function risicoAnalyse(text){
 
   let r=[], k=[];
 
-  if(t.includes("nicht parallel")){
+  if(text.includes("nicht parallel")){
     r.push("Geen parallel uitvoering mogelijk");
-    k.push("Fases blokkeren elkaar → vertraging");
+    k.push("Fases blokkeren elkaar");
   }
 
-  if(t.includes("unterbrechung")){
+  if(text.includes("unterbrechung")){
     r.push("Onderbreking mogelijk");
-    k.push("Stilstand tussen fases");
+    k.push("Stilstand tussen werkzaamheden");
   }
 
-  if(t.includes("drittfirmen")){
+  if(text.includes("drittfirmen")){
     r.push("Afhankelijkheid derden");
     k.push("Planning afhankelijk van nutsbedrijven");
   }
 
-  if(t.includes("nicht vergütet")){
+  if(text.includes("nicht vergütet")){
     r.push("Niet vergoede werkzaamheden");
     k.push("Kosten liggen bij aannemer");
   }
@@ -138,23 +158,25 @@ function getRisico(t){
 }
 
 // ===== GROTE SAMENVATTING =====
-function bigSummary(t){
+function bigSummary(plan, text){
 
   return `
-  Dit project betreft een gefaseerde uitvoering waarbij meerdere Planstraßen in volgorde worden gerealiseerd. 
-  De uitvoeringsstrategie is afhankelijk van een strakke fasering waarbij werkzaamheden niet gelijktijdig kunnen plaatsvinden.
+  De fase ${plan} vormt een integraal onderdeel van de totale projectuitvoering en is bepalend voor de voortgang van het werk. 
+  Binnen deze fase worden essentiële werkzaamheden uitgevoerd die direct aansluiten op voorgaande en opvolgende fases.
 
-  Binnen het contract zijn bepalingen opgenomen die invloed hebben op zowel planning als financiële risico’s. 
-  Met name het ontbreken van parallelle uitvoering en mogelijke onderbrekingen zorgen voor een verhoogde druk op de doorlooptijd.
+  De uitvoering binnen deze fase is sterk afhankelijk van de algemene projectfasering en dient in een logische volgorde plaats te vinden. 
+  Door contractuele beperkingen, zoals het ontbreken van parallelle uitvoering, ontstaat een verhoogde druk op de planning en doorlooptijd.
 
-  Daarnaast is er sprake van afhankelijkheid van externe partijen, zoals nutsbedrijven, 
-  wat extra coördinatie vereist en een verhoogd risico op vertraging met zich meebrengt.
+  Daarnaast speelt de afhankelijkheid van externe partijen een belangrijke rol. 
+  Werkzaamheden van nutsbedrijven en andere derden kunnen directe invloed hebben op de voortgang en vereisen intensieve coördinatie.
 
-  Vanuit uitvoeringsperspectief vraagt dit project om een gedetailleerde voorbereiding, 
-  strakke planning en continue afstemming tussen alle betrokken partijen.
+  Vanuit financieel perspectief moet rekening worden gehouden met werkzaamheden die mogelijk niet afzonderlijk worden vergoed. 
+  Dit vraagt om een nauwkeurige werkvoorbereiding en kostenbewaking.
 
-  Conclusie: het project is uitvoerbaar, maar kent duidelijke risico’s die actief gemanaged moeten worden 
-  om vertraging en extra kosten te voorkomen.
+  De combinatie van fasering, afhankelijkheden en contractuele bepalingen maakt deze fase kritisch binnen het totale project.
+
+  Conclusie: succesvolle uitvoering van ${plan} vereist een gedetailleerde voorbereiding, strakke planning, 
+  continue afstemming en actieve risicobeheersing.
   `;
 }
 
@@ -165,39 +187,38 @@ function analyse(){
   if(!t) return;
 
   let plans = detectPlanstrassen(t);
-  let mat = extractMaterials(t);
-  let risico = getRisico(t);
+  let split = splitPerPlan(t, plans);
 
   out.innerHTML = `
 
-  <div class="section">
-    <h3>Projectanalyse</h3>
-    <p>${bigSummary(t)}</p>
-  </div>
+  ${plans.map(p=>{
 
-  <div class="section">
-    <h3>Planstraßen</h3>
-    ${plans.map(p=>`<div class="card"><b>${p}</b></div>`).join("")}
-  </div>
+    let txt = split[p];
+    let mat = extractMaterials(txt);
+    let ris = risicoAnalyse(txt);
 
-  <div class="section">
-    <h3>Risico’s</h3>
-    <ul>${risico.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+    return `
+    <div class="section">
 
-    <h3>Knelpunten</h3>
-    <ul>${risico.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
-  </div>
+      <h2>${p}</h2>
 
-  <div class="section">
-    <h3>Bestellijst (indicatief)</h3>
+      <p>${bigSummary(p, txt)}</p>
 
-    ${Object.entries(mat).map(([k,v])=>`
-      <div class="card">
-        ${k} → ${v}x
-      </div>
-    `).join("")}
+      <h3>Risico’s</h3>
+      <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
 
-  </div>
+      <h3>Knelpunten</h3>
+      <ul>${ris.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
+
+      <h3>Bestellijst</h3>
+      ${Object.entries(mat).map(([k,v])=>`
+        <div class="card">${k} → ${v}x</div>
+      `).join("")}
+
+    </div>
+    `;
+
+  }).join("")}
 
   `;
 }
