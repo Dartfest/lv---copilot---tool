@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Executive Demo</title>
+<title>LV Intelligence – Executive AI Demo</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,7 +17,6 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
-  margin-right:5px;
 }
 
 .grid {
@@ -32,6 +31,7 @@ button {
 
 .high { color:#dc2626; }
 .mid { color:#f59e0b; }
+.good { color:#16a34a; }
 
 .section {
   background:#fff;
@@ -48,11 +48,8 @@ button {
 
 <div class="container">
 
-<input type="file" id="pdfFile">
-<textarea id="lvText" placeholder="Plak hier LV tekst of upload PDF"></textarea>
-
+<textarea id="lvText" placeholder="Plak hier LV tekst"></textarea>
 <button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
 
 <div id="out"></div>
 
@@ -60,277 +57,194 @@ button {
 
 <script>
 
-// ===== SAFE SCRIPT LOADER =====
-function loadScript(url){
-  return new Promise((res,rej)=>{
-    let s=document.createElement("script");
-    s.src=url;
-    s.onload=res;
-    s.onerror=rej;
-    document.body.appendChild(s);
-  });
+// ===== DATUM =====
+const monthMap = {
+  "juni":6,"juli":7,"august":8,"mai":5
+};
+
+function extractDates(text){
+  let r=[], regex=/(juni|juli|august|mai)\s+(20\d{2})/gi, m;
+  while((m=regex.exec(text))){
+    r.push({
+      label:m[0],
+      value:parseInt(m[2])*12 + monthMap[m[1]],
+      month:monthMap[m[1]],
+      year:parseInt(m[2])
+    });
+  }
+  return r;
 }
 
-// ===== PDF LOAD =====
-async function loadPDF(file){
-  try{
-    if(typeof pdfjsLib === "undefined"){
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
-    }
+// ===== FASES =====
+function extractPhases(text){
+  let valid=["c","d","e"];
+  let r=[], regex=/(\d)\.\s*bauabschnitt.*?planstraße\s*([a-z])/gi, m;
 
-    const reader = new FileReader();
-
-    reader.onload = async function(){
-      const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-      let text="";
-
-      for(let i=1;i<=pdf.numPages;i++){
-        let page = await pdf.getPage(i);
-        let content = await page.getTextContent();
-        text += content.items.map(i=>i.str).join(" ") + "\n";
-      }
-
-      lvText.value = text;
-    };
-
-    reader.readAsArrayBuffer(file);
-
-  } catch {
-    alert("PDF lezen mislukt — gebruik tekst.");
-  }
-}
-
-pdfFile.addEventListener("change", e=>{
-  if(e.target.files[0]) loadPDF(e.target.files[0]);
-});
-
-
-// =============================
-// 🧠 PLANNING ENGINE
-// =============================
-function createPlanningEngine(text){
-
-  const months = {
-    "juni":6,"juli":7,"august":8,"mai":5
-  };
-
-  function extractDates(){
-    let r=[];
-    let regex=/(juni|juli|august|mai)\s+(20\d{2})/gi;
-    let m;
-    while((m=regex.exec(text))){
-      r.push({
-        label:m[0],
-        value:parseInt(m[2])*12 + months[m[1]]
-      });
-    }
-    return r;
-  }
-
-  function extractPhases(){
-    let r=[];
-    let regex=/(\d)\.\s*bauabschnitt.*?planstraße\s*([a-z])/gi;
-    let m;
-    while((m=regex.exec(text))){
+  while((m=regex.exec(text))){
+    if(valid.includes(m[2].toLowerCase())){
       r.push({
         id:parseInt(m[1]),
         name:`Fase ${m[1]} - Planstraat ${m[2].toUpperCase()}`
       });
     }
-    return r;
+  }
+  return r;
+}
+
+// ===== PLANNING =====
+function buildPlanning(text){
+  let dates=extractDates(text);
+  let phases=extractPhases(text);
+
+  phases.forEach((p,i)=>{
+    p.start=dates[i];
+    p.end=dates[i+1] || dates[dates.length-1];
+    p.duration=p.end.value - p.start.value;
+  });
+
+  return phases;
+}
+
+// ===== RISICO =====
+function analyseRisico(text){
+
+  let r={
+    contract:[],
+    planning:[],
+    uitvoering:[],
+    financieel:[],
+    coordinatie:[]
+  };
+
+  if(text.includes("nicht vergütet")){
+    r.contract.push("Niet vergoede werkzaamheden");
+    r.financieel.push("Kosten voor aannemer");
   }
 
-  function build(phases, dates){
-    phases.forEach((p,i)=>{
-      p.start = dates[i]?.value || dates[0]?.value;
-      p.end   = dates[i+1]?.value || dates[dates.length-1]?.value;
-      p.duration = p.end - p.start;
-      p.dependsOn = i>0 ? phases[i-1].name : null;
-    });
-    return phases;
+  if(text.includes("unterbrechung")){
+    r.planning.push("Onderbreking zonder vergoeding");
+    r.financieel.push("Stilstand kosten");
   }
 
-  function getCriticalPath(phases){
-    return phases.map(p=>p.name);
+  if(text.includes("nicht parallel")){
+    r.planning.push("Geen parallel uitvoering");
   }
 
-  function getStats(phases){
-    let total = phases.reduce((a,b)=>a+b.duration,0);
-    let longest = Math.max(...phases.map(p=>p.duration));
-    return { total, longest, count: phases.length };
+  if(text.includes("drittfirmen")){
+    r.uitvoering.push("Afhankelijkheid derden");
+    r.coordinatie.push("Afstemming nutsbedrijven");
   }
 
-  let dates = extractDates();
-  let phases = build(extractPhases(), dates);
+  return r;
+}
+
+// ===== ROI =====
+function calculateROI(r){
+
+  let model = {
+    contract:{impact:50000,kans:0.6},
+    planning:{impact:30000,kans:0.5},
+    uitvoering:{impact:20000,kans:0.4},
+    financieel:{impact:40000,kans:0.6},
+    coordinatie:{impact:15000,kans:0.5}
+  };
+
+  let totaal=0;
+
+  for(let k in r){
+    let count=r[k].length;
+    if(model[k]){
+      totaal += count * model[k].impact * model[k].kans;
+    }
+  }
+
+  let besparing = totaal * 0.4;
+  let investering = 10000;
+  let roi = ((besparing - investering)/investering)*100;
 
   return {
-    phases,
-    criticalPath: getCriticalPath(phases),
-    stats: getStats(phases)
+    risicoKosten: Math.round(totaal),
+    besparing: Math.round(besparing),
+    investering,
+    roi: Math.round(roi)
   };
 }
 
+// ===== TOP RISICO =====
+function topRisico(r){
 
-// =============================
-// 📊 UI RENDER
-// =============================
-function renderPlanning(engine){
+  let lijst = [];
 
-  let {phases, criticalPath, stats} = engine;
+  Object.entries(r).forEach(([type,items])=>{
+    items.forEach(i=>{
+      lijst.push({tekst:i,type});
+    });
+  });
 
-  let min=Math.min(...phases.map(p=>p.start));
-  let max=Math.max(...phases.map(p=>p.end));
-  let total=max-min;
-
-  return `
-
-  <div class="section">
-    <h3>Planning Overzicht</h3>
-
-    <div class="grid">
-      <div class="card"><div>Fases</div><div class="big">${stats.count}</div></div>
-      <div class="card"><div>Totale duur</div><div class="big">${stats.total} mnd</div></div>
-      <div class="card"><div>Langste fase</div><div class="big">${stats.longest} mnd</div></div>
-      <div class="card"><div>Kritieke pad</div><div class="big high">${criticalPath.length}</div></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h3>Tijdsbalk (Gantt)</h3>
-
-    ${phases.map(p=>{
-      let left=((p.start-min)/total)*100;
-      let width=(p.duration/total)*100;
-      let critical = criticalPath.includes(p.name);
-
-      return `
-      <div style="margin-bottom:12px;">
-        <b>${p.name}</b><br>
-        <small>${p.dependsOn ? "Afhankelijk van: "+p.dependsOn : "Startfase"}</small>
-
-        <div style="background:#ddd;">
-          <div style="
-            margin-left:${left}%;
-            width:${width}%;
-            height:20px;
-            background:${critical ? '#dc2626' : '#2563eb'};
-          "></div>
-        </div>
-      </div>
-      `;
-    }).join("")}
-
-  </div>
-
-  <div class="section">
-    <h3>Kritieke pad</h3>
-    <ul>
-      ${criticalPath.map(c=>`<li class="high">${c}</li>`).join("")}
-    </ul>
-  </div>
-  `;
+  return lijst.slice(0,3);
 }
 
+// ===== GO / NO GO =====
+function goNoGo(risico, roi){
 
-// =============================
-// ⚠️ RISICO ANALYSE
-// =============================
+  let total = Object.values(risico).flat().length;
+
+  if(total > 5 || roi.roi < 0){
+    return {advies:"NO-GO", class:"high"};
+  }
+
+  if(total > 3){
+    return {advies:"GO MET RISICO", class:"mid"};
+  }
+
+  return {advies:"GO", class:"good"};
+}
+
+// ===== MAIN =====
 function analyse(){
 
-  try{
+  let t = lvText.value.toLowerCase();
+  if(!t) return;
 
-    let t = lvText.value.toLowerCase();
-    if(!t) return out.innerHTML="Geen tekst";
+  let planning = buildPlanning(t);
+  let risico = analyseRisico(t);
+  let roi = calculateROI(risico);
+  let top = topRisico(risico);
+  let advies = goNoGo(risico, roi);
 
-    let engine = createPlanningEngine(t);
+  out.innerHTML = `
 
-    let risico={
-      contract:[],
-      planning:[],
-      uitvoering:[],
-      financieel:[]
-    };
+  <div class="grid">
+    <div class="card"><div>Fases</div><div class="big">${planning.length}</div></div>
+    <div class="card"><div>Risico’s</div><div class="big high">${Object.values(risico).flat().length}</div></div>
+    <div class="card"><div>ROI</div><div class="big">${roi.roi}%</div></div>
+    <div class="card"><div>Advies</div><div class="big ${advies.class}">${advies.advies}</div></div>
+  </div>
 
-    if(t.includes("nicht vergütet")){
-      risico.contract.push("Niet vergoede werkzaamheden");
-      risico.financieel.push("Kosten voor eigen rekening");
-    }
+  <div class="section">
+    <h3>Executive Samenvatting</h3>
+    <p>
+    Project met gefaseerde uitvoering en duidelijke afhankelijkheden.
+    Belangrijkste risico’s zitten in contract en externe partijen.
+    Besluitvorming vereist focus op risicobeheersing.
+    </p>
+  </div>
 
-    if(t.includes("unterbrechung")){
-      risico.planning.push("Onderbreking werkzaamheden");
-      risico.financieel.push("Stilstand kosten");
-    }
+  <div class="section">
+    <h3>Top Risico’s</h3>
+    <ul>
+      ${top.map(r=>`<li class="high">${r.tekst}</li>`).join("")}
+    </ul>
+  </div>
 
-    if(t.includes("nicht parallel")){
-      risico.planning.push("Geen parallel uitvoering");
-    }
+  <div class="section">
+    <h3>Financiële Impact</h3>
+    <p>Risico waarde: <b class="high">€ ${roi.risicoKosten.toLocaleString()}</b></p>
+    <p>Besparing: € ${roi.besparing.toLocaleString()}</p>
+    <p>Investering: € ${roi.investering.toLocaleString()}</p>
+  </div>
 
-    if(t.includes("drittfirmen")){
-      risico.uitvoering.push("Afhankelijkheid derden");
-    }
-
-    let totalRisico = Object.values(risico).flat().length;
-
-    let samenvatting = `
-Dit project bevat ${engine.stats.count} fasen met een lineaire planning.
-De kritieke pad structuur betekent dat vertraging direct impact heeft op de einddatum.
-Belangrijkste risico’s liggen bij externe afhankelijkheden en contractuele uitsluitingen.
-Strakke coördinatie en fasering zijn essentieel.
-    `;
-
-    out.innerHTML = `
-
-    <div class="grid">
-      <div class="card"><div>Fases</div><div class="big">${engine.stats.count}</div></div>
-      <div class="card"><div>Risico’s</div><div class="big high">${totalRisico}</div></div>
-      <div class="card"><div>Totale duur</div><div class="big">${engine.stats.total} mnd</div></div>
-      <div class="card"><div>Status</div><div class="big">Analyse gereed</div></div>
-    </div>
-
-    <div class="section">
-      <h3>Executive Samenvatting</h3>
-      <p>${samenvatting}</p>
-    </div>
-
-    ${renderPlanning(engine)}
-
-    <div class="section">
-      <h3>Risico Analyse</h3>
-
-      <b>Contract</b>
-      <ul>${risico.contract.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
-
-      <b>Planning</b>
-      <ul>${risico.planning.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
-
-      <b>Uitvoering</b>
-      <ul>${risico.uitvoering.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
-
-      <b>Financieel</b>
-      <ul>${risico.financieel.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
-    </div>
-    `;
-
-  } catch(e){
-    out.innerHTML = "Fout: "+e.message;
-  }
-}
-
-
-// =============================
-// 📄 PDF EXPORT
-// =============================
-async function exportPDF(){
-
-  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  doc.text("LV Analyse Rapport",10,10);
-  doc.text(out.innerText,10,20);
-
-  doc.save("LV_analyse.pdf");
+  `;
 }
 
 </script>
