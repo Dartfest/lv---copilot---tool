@@ -34,7 +34,11 @@ ul { margin-top:5px; }
 
 <div class="container">
 
-<textarea id="lvText" placeholder="Plak LV tekst"></textarea>
+<!-- ✅ UPLOAD KNOP -->
+<input type="file" id="pdfFile" accept=".pdf"><br><br>
+
+<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
+
 <button onclick="analyse()">Analyse</button>
 
 <div id="out"></div>
@@ -43,7 +47,55 @@ ul { margin-top:5px; }
 
 <script>
 
-// ===== VASTE STRUCTUUR (ECHT LV) =====
+// ===== PDF SCRIPT LOADER =====
+function loadScript(url){
+  return new Promise(res=>{
+    let s=document.createElement("script");
+    s.src=url;
+    s.onload=res;
+    document.body.appendChild(s);
+  });
+}
+
+// ===== PDF INLEZEN =====
+async function handlePDF(file){
+
+  try{
+
+    if(typeof pdfjsLib === "undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    }
+
+    let reader = new FileReader();
+
+    reader.onload = async function(){
+
+      let pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text = "";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page = await pdf.getPage(i);
+        let content = await page.getTextContent();
+        text += content.items.map(i=>i.str).join(" ") + "\n";
+      }
+
+      document.getElementById("lvText").value = text;
+
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  } catch(e){
+    alert("PDF laden mislukt: " + e);
+  }
+}
+
+// ===== UPLOAD EVENT =====
+document.getElementById("pdfFile").onchange = function(e){
+  if(e.target.files[0]) handlePDF(e.target.files[0]);
+};
+
+// ===== FASES =====
 const fases = [
   {
     name:"Bauabschnitt 1",
@@ -67,9 +119,8 @@ const fases = [
   }
 ];
 
-// ===== SAMENVATTING (ECHT GOED NL) =====
+// ===== SAMENVATTING =====
 function summary(f){
-
 return `
 <p>
 ${f.name} (${f.plan}) betreft een volledig uitvoeringsdeel van het project waarbij alle civieltechnische werkzaamheden integraal worden uitgevoerd.
@@ -92,51 +143,44 @@ Conclusie: deze fase ligt op het kritieke pad en vereist strakke planning, conti
 `;
 }
 
-// ===== WERKZAAMHEDEN (GROEPEERD) =====
+// ===== WERKZAAMHEDEN =====
 function werkzaamheden(){
-
 return `
 <ul>
-<li>Aanleg en realisatie van rioleringssystemen (kanaalbouw)</li>
-<li>Uitvoering van nutsvoorzieningen (water, elektra, telecom)</li>
-<li>Aanleg van bouwwegen en tijdelijke infrastructuur</li>
+<li>Aanleg rioleringssystemen (kanaalbouw)</li>
+<li>Uitvoering nutsvoorzieningen (water, elektra, telecom)</li>
+<li>Aanleg bouwwegen (Baustraßen)</li>
 <li>Grondwerk en sleufwerkzaamheden</li>
 <li>Aansluitingen op bestaande netwerken</li>
-<li>Afwerking en oplevering van het tracé</li>
+<li>Afwerking en oplevering</li>
 </ul>
 `;
 }
 
 // ===== RISICO =====
 function risico(f){
-
 return `
 <ul>
-<li class="high">Geen parallel uitvoering mogelijk → volledige afhankelijkheid van volgorde</li>
-<li class="high">Strikte einddatum (${f.periode}) → risico op boetes bij vertraging</li>
-<li class="high">Geen onderbreking toegestaan → hoge druk op uitvoering</li>
-<li class="mid">Afhankelijkheid van nutsbedrijven en derden</li>
-<li class="mid">Beperkte werkruimte en logistieke complexiteit</li>
+<li class="high">Geen parallel uitvoering mogelijk → volledige afhankelijkheid</li>
+<li class="high">Strikte einddatum (${f.periode})</li>
+<li class="high">Geen onderbreking toegestaan → hoge uitvoeringsdruk</li>
+<li class="mid">Afhankelijkheid van nutsbedrijven</li>
+<li class="mid">Logistieke beperkingen</li>
 </ul>
 `;
 }
 
 // ===== KRITIEKE PAD =====
 function critical(){
-
 return `
 <div class="section">
 <h2>Kritieke Pad</h2>
 
-<p>
-De uitvoering van het project is volledig sequentieel opgebouwd:
-</p>
-
 <p><b>BA1 → BA2 → BA3 → BA4</b></p>
 
 <p class="high">
-Er is geen mogelijkheid tot parallel werken. Dit betekent dat de volledige planning kritisch is.
-Elke vertraging heeft directe impact op de einddatum van het project.
+Volledig sequentieel – geen parallel uitvoering mogelijk.
+Elke vertraging werkt direct door in het hele project.
 </p>
 </div>
 `;
@@ -169,7 +213,7 @@ function analyse(){
     `;
   });
 
-  out.innerHTML = html;
+  document.getElementById("out").innerHTML = html;
 }
 
 </script>
