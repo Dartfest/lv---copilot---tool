@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Final Pro</title>
+<title>LV Intelligence – Universal Engine</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,14 +17,12 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
-  margin:3px;
 }
 
 .card { background:#fff; padding:12px; border-radius:6px; margin-bottom:10px; }
 
 .high { color:#dc2626; }
 .mid { color:#f59e0b; }
-.good { color:#16a34a; }
 
 .section {
   background:#fff;
@@ -37,13 +35,11 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Final Engine</div>
+<div class="header">LV Intelligence – Universal Engine</div>
 
 <div class="container">
 
 <input type="file" id="pdfFile" accept=".pdf"><br><br>
-
-<input type="text" id="projectName" placeholder="Project naam">
 
 <textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
@@ -71,6 +67,7 @@ async function handlePDF(file){
   }
 
   let reader=new FileReader();
+
   reader.onload=async function(){
     let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
     let text="";
@@ -92,11 +89,14 @@ pdfFile.onchange=e=>{
 };
 
 // ===== DATUM =====
-const months = {juni:6,juli:7,august:8,mai:5};
+const months = {
+  januar:1,februar:2,märz:3,april:4,mai:5,
+  juni:6,juli:7,august:8,september:9
+};
 
 function extractDates(t){
   let r=[], m;
-  let regex=/(juni|juli|august|mai)\s+(20\d{2})/gi;
+  let regex=/(januar|februar|märz|april|mai|juni|juli|august|september)\s+(20\d{2})/gi;
 
   while((m=regex.exec(t))){
     r.push(parseInt(m[2])*12 + months[m[1]]);
@@ -105,58 +105,118 @@ function extractDates(t){
   return r;
 }
 
-// ===== FASE STRUCTUUR =====
-function buildRealPhases(t){
+// ===== FASE DETECTIE =====
+function detectRawPhases(text){
 
-  let dates = extractDates(t);
+  let matches = text.match(/(bauabschnitt\s*\d+|planstraße\s*[a-z]|teil\s*\d+|los\s*\d+)/gi) || [];
 
-  let phases = [
-    { name:"Planstraße C" },
-    { name:"Planstraße E" },
-    { name:"Planstraße D – Teil 1" },
-    { name:"Planstraße D – Teil 2" }
-  ];
+  return matches.map(m => m.toLowerCase());
+}
+
+// ===== FASE BUNDELING =====
+function buildPhases(text){
+
+  let raw = detectRawPhases(text);
+  let map = {};
+
+  raw.forEach(r=>{
+
+    let key;
+
+    if(r.includes("planstraße")){
+      key = r.match(/planstraße\s*[a-z]/)[0];
+    }
+    else if(r.includes("bauabschnitt")){
+      key = r.match(/bauabschnitt\s*\d+/)[0];
+    }
+    else if(r.includes("los")){
+      key = r.match(/los\s*\d+/)[0];
+    }
+    else{
+      key = "overig";
+    }
+
+    if(!map[key]){
+      map[key] = {
+        name: key.toUpperCase(),
+        refs:[]
+      };
+    }
+
+    map[key].refs.push(r);
+  });
+
+  return Object.values(map);
+}
+
+// ===== DATUM KOPPELEN =====
+function attachDates(phases, text){
+
+  let dates = extractDates(text);
 
   return phases.map((p,i)=>{
 
     let start = dates[i] || dates[0] || 0;
-    let end = dates[i+1] || (start + 6);
-
-    let risico=[];
-    let aandacht=[];
-
-    if(t.includes("nicht parallel")){
-      risico.push("Geen parallel uitvoering mogelijk");
-    }
-
-    if(t.includes("unterbrechung")){
-      risico.push("Onderbreking tussen fases mogelijk");
-    }
-
-    if(t.includes("drittfirmen")){
-      risico.push("Afhankelijkheid van nutsbedrijven");
-      aandacht.push("Afstemming met derden noodzakelijk");
-    }
-
-    if(t.includes("nicht vergütet")){
-      risico.push("Niet vergoede werkzaamheden binnen deze fase");
-    }
-
-    // fase-specifiek
-    if(p.name.includes("D – Teil 2")){
-      aandacht.push("Afrondende fase met verhoogde coördinatie");
-    }
+    let end = dates[i+1] || start + 6;
 
     return {
       ...p,
       start,
       end,
-      duur: end - start,
+      duur: end - start
+    };
+  });
+}
+
+// ===== RISICO =====
+function addRisk(phases, text){
+
+  return phases.map(p=>{
+
+    let risico=[];
+    let aandacht=[];
+
+    if(text.includes("nicht parallel")){
+      risico.push("Geen parallel uitvoering mogelijk");
+    }
+
+    if(text.includes("unterbrechung")){
+      risico.push("Onderbreking mogelijk tussen fases");
+    }
+
+    if(text.includes("drittfirmen")){
+      risico.push("Afhankelijkheid van derden");
+      aandacht.push("Afstemming met nutsbedrijven vereist");
+    }
+
+    if(text.includes("nicht vergütet")){
+      risico.push("Niet vergoede werkzaamheden");
+    }
+
+    return {
+      ...p,
       risico,
       aandacht
     };
-
   });
+}
+
+// ===== SAMENVATTING =====
+function phaseSummary(p){
+
+  let txt = [];
+
+  txt.push("Werkzaamheden binnen deze fase volgens LV-structuur.");
+
+  if(p.risico.length){
+    txt.push("Risico’s aanwezig die planning en uitvoering beïnvloeden.");
+  }
+
+  if(p.aandacht.length){
+    txt.push("Extra coördinatie en afstemming vereist.");
+  }
+
+  return txt;
 }
 
 // ===== DATUM FORMAT =====
@@ -166,34 +226,14 @@ function formatDate(v){
   return `${m}/${y}`;
 }
 
-// ===== SAMENVATTING PER FASE =====
-function faseSamenvatting(f){
-
-  let txt = [];
-
-  txt.push("Uitvoering binnen deze fase volgens LV-fasering.");
-
-  if(f.risico.length > 0){
-    txt.push("Aanwezige risico’s beïnvloeden planning en uitvoering.");
-  }
-
-  if(f.aandacht.length > 0){
-    txt.push("Extra aandacht vereist voor afstemming en uitvoering.");
-  }
-
-  if(f.naam?.includes("D")){
-    txt.push("Gefaseerde uitvoering binnen dezelfde planstraat.");
-  }
-
-  return txt;
-}
-
 // ===== SCORE =====
 function calcScore(phases){
+
   let risico = phases.reduce((a,p)=>a+p.risico.length,0);
   let roi = 100 - (risico * 5);
 
   let advies="GO", cls="good";
+
   if(roi<50){advies="NO-GO";cls="high";}
   else if(roi<70){advies="GO MET RISICO";cls="mid";}
 
@@ -206,7 +246,10 @@ function analyse(){
   let t = lvText.value.toLowerCase();
   if(!t) return;
 
-  let phases = buildRealPhases(t);
+  let phases = buildPhases(t);
+  phases = attachDates(phases, t);
+  phases = addRisk(phases, t);
+
   let score = calcScore(phases);
 
   out.innerHTML = `
@@ -218,30 +261,30 @@ function analyse(){
   </div>
 
   <div class="section">
-    <h3>Fase Analyse (Realistisch)</h3>
+    <h3>Fase Analyse (Universeel)</h3>
 
-    ${phases.map(f=>`
+    ${phases.map(p=>`
       <div class="card">
 
-        <b>${f.name}</b><br>
-        Periode: ${formatDate(f.start)} → ${formatDate(f.end)}<br>
-        Duur: ${f.duur} mnd
+        <b>${p.name}</b><br>
+        Periode: ${formatDate(p.start)} → ${formatDate(p.end)}<br>
+        Duur: ${p.duur} mnd
 
         <br><br>
 
         <b>Samenvatting</b>
         <ul>
-          ${faseSamenvatting(f).map(x=>`<li>${x}</li>`).join("")}
+          ${phaseSummary(p).map(x=>`<li>${x}</li>`).join("")}
         </ul>
 
         <b>Risico’s</b>
         <ul>
-          ${f.risico.map(r=>`<li class="high">${r}</li>`).join("")}
+          ${p.risico.map(r=>`<li class="high">${r}</li>`).join("")}
         </ul>
 
         <b>Aandachtspunten</b>
         <ul>
-          ${f.aandacht.map(a=>`<li class="mid">${a}</li>`).join("")}
+          ${p.aandacht.map(a=>`<li class="mid">${a}</li>`).join("")}
         </ul>
 
       </div>
