@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Multi Project Dashboard</title>
+<title>LV Intelligence – Smart Engine</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -37,12 +37,16 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Multi Project</div>
+<div class="header">LV Intelligence – Smart Analysis</div>
 
 <div class="container">
 
+<input type="file" id="pdfFile" accept=".pdf">
+<br><br>
+
 <input type="text" id="projectName" placeholder="Project naam">
-<textarea id="lvText" placeholder="Plak LV tekst"></textarea>
+
+<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="analyse()">Analyse</button>
 <button onclick="saveProject()">Opslaan</button>
@@ -50,7 +54,7 @@ button {
 <div id="out"></div>
 
 <div class="section">
-  <h3>Opgeslagen projecten</h3>
+  <h3>Projecten</h3>
   <div id="projectList"></div>
 </div>
 
@@ -63,45 +67,94 @@ button {
 
 <script>
 
-// ===== STORAGE =====
-function getProjects(){
-  return JSON.parse(localStorage.getItem("projects") || "[]");
+// ===== SCRIPT LOADER =====
+function loadScript(url){
+  return new Promise((res,rej)=>{
+    let s=document.createElement("script");
+    s.src=url;
+    s.onload=res;
+    s.onerror=rej;
+    document.body.appendChild(s);
+  });
 }
 
-function saveProjects(p){
-  localStorage.setItem("projects", JSON.stringify(p));
+// ===== PDF =====
+async function handlePDF(file){
+  try{
+    if(typeof pdfjsLib === "undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = async function(){
+      const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text="";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page = await pdf.getPage(i);
+        let content = await page.getTextContent();
+        text += content.items.map(i=>i.str).join(" ") + "\n";
+      }
+
+      lvText.value = text;
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  } catch(e){
+    alert("PDF lezen mislukt");
+  }
 }
+
+pdfFile.addEventListener("change", e=>{
+  if(e.target.files[0]) handlePDF(e.target.files[0]);
+});
+
+
+// ===== SECTIE HERKENNING =====
+function detectSections(text){
+
+  return {
+    planning: text.match(/bauablauf|bauzeit|erschließung/gi) || [],
+    contract: text.match(/vergütet|vergütung|kosten/gi) || [],
+    risico: text.match(/unterbrechung|nicht|verzug/gi) || [],
+    derden: text.match(/drittfirmen|versorgung/gi) || []
+  };
+}
+
 
 // ===== ANALYSE CORE =====
 function analyseCore(text){
 
-  let risicoCount = 0;
+  let sections = detectSections(text);
 
-  if(text.includes("nicht vergütet")) risicoCount+=2;
-  if(text.includes("unterbrechung")) risicoCount+=2;
-  if(text.includes("nicht parallel")) risicoCount+=1;
-  if(text.includes("drittfirmen")) risicoCount+=1;
+  let risicoScore =
+    sections.risico.length +
+    sections.contract.length +
+    sections.derden.length;
 
   let fases = (text.match(/bauabschnitt/gi) || []).length;
 
-  let roi = 100 - (risicoCount * 10);
+  let roi = 100 - (risicoScore * 5);
 
-  let advies = "GO";
-  let cls="good";
+  let advies="GO", cls="good";
 
   if(roi < 50){ advies="NO-GO"; cls="high"; }
   else if(roi < 70){ advies="GO MET RISICO"; cls="mid"; }
 
   return {
     fases,
-    risico:risicoCount,
+    risico: risicoScore,
     roi,
     advies,
-    cls
+    cls,
+    sections
   };
 }
 
-// ===== UI ANALYSE =====
+
+// ===== UI =====
 let lastAnalysis = null;
 
 function analyse(){
@@ -113,14 +166,37 @@ function analyse(){
   lastAnalysis = res;
 
   out.innerHTML = `
-    <div class="card">
-      Fases: ${res.fases}<br>
-      Risico: <span class="high">${res.risico}</span><br>
-      ROI: ${res.roi}%<br>
-      Advies: <span class="${res.cls}">${res.advies}</span>
-    </div>
+
+  <div class="card">
+    Fases: ${res.fases}<br>
+    Risico score: <span class="high">${res.risico}</span><br>
+    ROI: ${res.roi}%<br>
+    Advies: <span class="${res.cls}">${res.advies}</span>
+  </div>
+
+  <div class="section">
+    <h3>Gedetecteerde Secties</h3>
+
+    <b>Planning (${res.sections.planning.length})</b><br>
+    <b>Contract (${res.sections.contract.length})</b><br>
+    <b>Risico (${res.sections.risico.length})</b><br>
+    <b>Derden (${res.sections.derden.length})</b>
+
+  </div>
+
   `;
 }
+
+
+// ===== STORAGE =====
+function getProjects(){
+  return JSON.parse(localStorage.getItem("projects") || "[]");
+}
+
+function saveProjects(p){
+  localStorage.setItem("projects", JSON.stringify(p));
+}
+
 
 // ===== OPSLAAN =====
 function saveProject(){
@@ -140,9 +216,9 @@ function saveProject(){
   });
 
   saveProjects(projects);
-
   renderProjects();
 }
+
 
 // ===== LIJST =====
 function renderProjects(){
@@ -160,8 +236,9 @@ function renderProjects(){
   `).join("");
 }
 
+
 // ===== VERGELIJK =====
-let compareList = [];
+let compareList=[];
 
 function addCompare(i){
   compareList.push(getProjects()[i]);
@@ -175,7 +252,7 @@ function renderCompare(){
     return;
   }
 
-  compare.innerHTML = `
+  compare.innerHTML=`
   <table border="1" cellpadding="5">
     <tr>
       <th>Project</th>
@@ -198,6 +275,7 @@ function renderCompare(){
   </table>
   `;
 }
+
 
 // INIT
 renderProjects();
