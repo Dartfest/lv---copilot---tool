@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – OZ Werkend</title>
+<title>LV Intelligence – OZ + PDF (Werkend)</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -34,11 +34,14 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – OZ Analyse</div>
+<div class="header">LV Intelligence – OZ Analyse + PDF</div>
 
 <div class="container">
 
-<textarea id="lvText" placeholder="Plak LV tekst of laat leeg voor demo"></textarea>
+<!-- PDF UPLOAD -->
+<input type="file" id="pdfFile" accept=".pdf"><br><br>
+
+<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="extractOZ()">Analyse OZ</button>
 
@@ -48,21 +51,69 @@ button {
 
 <script>
 
+// ===== PDF SCRIPT LOADER =====
+function loadScript(url){
+  return new Promise(res=>{
+    let s=document.createElement("script");
+    s.src=url;
+    s.onload=res;
+    document.body.appendChild(s);
+  });
+}
+
+// ===== PDF HANDLER =====
+async function handlePDF(file){
+  try{
+
+    if(typeof pdfjsLib==="undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    }
+
+    let reader=new FileReader();
+
+    reader.onload=async function(){
+
+      let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text="";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page=await pdf.getPage(i);
+        let content=await page.getTextContent();
+        text+=content.items.map(i=>i.str).join(" ")+"\n";
+      }
+
+      lvText.value=text;
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  }catch(e){
+    alert("PDF fout: " + e);
+  }
+}
+
+// KOPPELING KNOP
+document.getElementById("pdfFile").addEventListener("change", e=>{
+  if(e.target.files[0]) handlePDF(e.target.files[0]);
+});
+
+// ===== OZ DATA =====
 let ozData = [];
 
+// ===== OZ EXTRACT =====
 function extractOZ(){
 
-  let text = lvText.value.trim();
+  let text = document.getElementById("lvText").value.trim();
 
-  // ===== ALS GEEN INPUT → GEBRUIK JOUW VOORBEELD =====
+  // FALLBACK (JOUW VOORBEELD)
   if(!text){
     text = `
 1.1.10.
 Baustelle einrichten und vorhalten
-Verladen, Anfahren, Abladen und Aufstellen aller notwendigen Baubüros, Unterkünfte mit Sanitäranlagen, der erforderlichen Geräte, Maschinen usw.
-Einrichten und Anschließen von Energie-, Ver- und Entsorgungsanlagen,
-Herrichten von Platzbefestigungen und Zufahrtswegen,
-sowie Betreiben und Unterhalten der gesamten Einrichtungen während der Bauzeit.
+Verladen, Anfahren, Abladen und Aufstellen aller notwendigen Baubüros, Unterkünfte mit Sanitäranlagen, Geräte und Maschinen.
+Einrichten und Anschließen von Energie-, Ver- und Entsorgungsanlagen.
+Herrichten von Platzbefestigungen und Zufahrtswegen.
+Betreiben und Unterhalten während der Bauzeit.
 Das Gelände ist durch AN anzumieten.
 Ein Baustelleneinrichtungsplan ist einzureichen.
 Die Abrechnung erfolgt prozentual nach Baufortschritt.
@@ -78,7 +129,7 @@ Die Abrechnung erfolgt prozentual nach Baufortschritt.
 
     let line = lines[i].trim();
 
-    // START OZ (1.1.10. of 1.1.10)
+    // START OZ
     if(/^\d+(\.\d+)+\.?$/.test(line)){
 
       if(current) ozData.push(current);
@@ -103,6 +154,7 @@ Die Abrechnung erfolgt prozentual nach Baufortschritt.
   render();
 }
 
+// ===== RENDER =====
 function render(){
 
   let html = `<div class="section"><h2>OZ Analyse</h2>`;
@@ -126,9 +178,10 @@ function render(){
 
   html += "</div>";
 
-  out.innerHTML = html;
+  document.getElementById("out").innerHTML = html;
 }
 
+// ===== VERTALING =====
 function translate(text){
 
   let t = text.toLowerCase();
@@ -137,9 +190,9 @@ function translate(text){
     return `
 Het inrichten en operationeel houden van de bouwplaats.
 
-Dit omvat:
-- aanvoer en plaatsing van bouwketen en voorzieningen
-- sanitaire units en werkplekken
+Inclusief:
+- bouwketen en voorzieningen
+- sanitaire installaties
 - machines en materieel
 - energie- en nutsvoorzieningen
 - bouwwegen en terreinverharding
