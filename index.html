@@ -17,20 +17,23 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
-  margin-right:5px;
   margin-top:5px;
 }
 
 .section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
-.oz { background:#f9fafb; padding:15px; margin-top:10px; border-radius:6px; }
 
 .high { color:#dc2626; }
+.mid { color:#f59e0b; }
+
+ul { margin-top:5px; }
+
+.oz { background:#f9fafb; padding:8px; margin-top:5px; border-radius:6px; }
 </style>
 </head>
 
 <body>
 
-<div class="header">LV Intelligence – Directie Analyse</div>
+<div class="header">LV Intelligence – Directie Analyse + OZ Export</div>
 
 <div class="container">
 
@@ -40,7 +43,7 @@ button {
 
 <button onclick="analyse()">Analyse</button>
 <button onclick="extractOZ()">Genereer OZ lijst</button>
-<button onclick="exportOZ()">Export OZ</button>
+<button onclick="exportOZ()">Export OZ (.txt)</button>
 
 <div id="out"></div>
 <div id="ozOut"></div>
@@ -60,135 +63,133 @@ function loadScript(url){
 }
 
 async function handlePDF(file){
-  if(typeof pdfjsLib==="undefined"){
-    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
-  }
-
-  let reader=new FileReader();
-
-  reader.onload=async function(){
-    let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-    let text="";
-
-    for(let i=1;i<=pdf.numPages;i++){
-      let page=await pdf.getPage(i);
-      let c=await page.getTextContent();
-      text+=c.items.map(i=>i.str).join(" ")+"\n";
+  try{
+    if(typeof pdfjsLib==="undefined"){
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
     }
 
-    lvText.value=text;
-  };
+    let reader=new FileReader();
 
-  reader.readAsArrayBuffer(file);
+    reader.onload=async function(){
+      let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+      let text="";
+
+      for(let i=1;i<=pdf.numPages;i++){
+        let page=await pdf.getPage(i);
+        let c=await page.getTextContent();
+        text+=c.items.map(i=>i.str).join(" ")+"\n";
+      }
+
+      lvText.value=text;
+    };
+
+    reader.readAsArrayBuffer(file);
+
+  }catch(e){
+    alert("PDF fout: "+e);
+  }
 }
 
 pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
+// ===== FASES =====
+const fases = [
+  {name:"Bauabschnitt 1", plan:"Planstraße C", periode:"06/2026 → 07/2027"},
+  {name:"Bauabschnitt 2", plan:"Planstraße E", periode:"aansluitend → 07/2027"},
+  {name:"Bauabschnitt 3", plan:"Planstraße D Teil 1", periode:"08/2027 → 05/2028"},
+  {name:"Bauabschnitt 4", plan:"Planstraße D Teil 2", periode:"aansluitend → 05/2028"}
+];
+
+// ===== SAMENVATTING =====
+function summary(f){
+return `
+<p>${f.name} (${f.plan}) betreft een volledige uitvoeringsfase inclusief riolering, nuts en infrastructuur.</p>
+<p class="high">Kritische fase zonder buffer.</p>
+`;
+}
+
+// ===== WERKZAAMHEDEN =====
+function werkzaamheden(){
+return `
+<ul>
+<li>Riolering (kanaalbouw)</li>
+<li>Nutsvoorzieningen</li>
+<li>Bouwwegen</li>
+<li>Grondwerk</li>
+<li>Aansluitingen</li>
+</ul>
+`;
+}
+
+// ===== RISICO =====
+function risico(f){
+return `
+<ul>
+<li class="high">Geen parallel uitvoering</li>
+<li class="high">Strikte deadline (${f.periode})</li>
+<li class="mid">Afhankelijk derden</li>
+</ul>
+`;
+}
+
 // ===== ANALYSE =====
 function analyse(){
 
   let html = `
   <div class="section">
-    <h2>Kritieke Pad</h2>
-    <p class="high">BA1 → BA2 → BA3 → BA4</p>
-    <p>Volledig sequentieel – GEEN parallel werk mogelijk</p>
-  </div>
-
-  <div class="section">
-    <h2>Fases</h2>
-    <ul>
-      <li>BA1 – Planstraße C (06/2026 → 07/2027)</li>
-      <li>BA2 – Planstraße E (direct na BA1)</li>
-      <li>BA3 – Planstraße D Teil 1 (08/2027)</li>
-      <li>BA4 – Planstraße D Teil 2 (tot 05/2028)</li>
-    </ul>
+  <h2>Kritieke Pad</h2>
+  <p class="high">BA1 → BA2 → BA3 → BA4</p>
   </div>
   `;
+
+  fases.forEach(f=>{
+    html += `
+    <div class="section">
+      <h2>${f.name} – ${f.plan}</h2>
+      <p><b>${f.periode}</b></p>
+      ${summary(f)}
+      <h3>Werkzaamheden</h3>
+      ${werkzaamheden()}
+      <h3>Risico’s</h3>
+      ${risico(f)}
+    </div>
+    `;
+  });
 
   out.innerHTML = html;
 }
 
-// ===== OZ =====
+// ===== OZ EXTRACT =====
 let ozData = [];
 
 function extractOZ(){
 
   let text = lvText.value;
 
-  if(!text.trim()){
-    text = `
-1.1.10.
-Baustelle einrichten und vorhalten
-Verladen, Anfahren, Abladen und Aufstellen aller notwendigen Baubüros.
-Die Abrechnung erfolgt prozentual nach Baufortschritt.
-1,000 psch
-    `;
-  }
-
   let lines = text.split("\n");
-  ozData = [];
-  let current = null;
 
-  for(let i=0;i<lines.length;i++){
+  ozData = lines.filter(l => l.match(/oz\s*\d+/i));
 
-    let line = lines[i].trim();
+  let html = `
+  <div class="section">
+  <h2>OZ Lijst + Vertaling</h2>
+  `;
 
-    // START OZ
-    if(/^\d+(\.\d+)+\.?$/.test(line)){
+  ozData.forEach(l=>{
 
-      if(current) ozData.push(current);
-
-      current = {
-        nr: line,
-        title: (lines[i+1] || "").trim(),
-        desc: "",
-        qty: ""
-      };
-
-      i++;
-      continue;
-    }
-
-    if(current){
-
-      if(/[\d,.]+\s*(psch|m²|m2|m|stk|st)/i.test(line)){
-        current.qty = line;
-      } else {
-        current.desc += " " + line;
-      }
-
-    }
-  }
-
-  if(current) ozData.push(current);
-
-  renderOZ();
-}
-
-// ===== RENDER =====
-function renderOZ(){
-
-  let html = `<div class="section"><h2>OZ Analyse</h2>`;
-
-  ozData.forEach(o=>{
+    let nl = l
+      .replace(/kanal/gi,"riolering")
+      .replace(/leitung/gi,"leiding")
+      .replace(/verlegen/gi,"aanleggen")
+      .replace(/herstellen/gi,"realiseren");
 
     html += `
-    <div class="oz">
-
-      <h3>${o.nr} ${o.title}</h3>
-
-      <b>Duits:</b><br>
-      ${o.desc}<br><br>
-
-      <b>Hoeveelheid:</b><br>
-      ${o.qty || "niet gevonden"}<br><br>
-
-      <b>Nederlands:</b><br>
-      ${translate(o.desc)}
-
-    </div>
+      <div class="oz">
+        <b>${l}</b><br>
+        ${nl}
+      </div>
     `;
   });
 
@@ -197,53 +198,21 @@ function renderOZ(){
   ozOut.innerHTML = html;
 }
 
-// ===== VERTALING =====
-function translate(t){
-
-  if(!t) return "";
-
-  if(t.toLowerCase().includes("baustelle einrichten")){
-    return `
-Het inrichten en operationeel houden van de bouwplaats.
-
-Inclusief:
-- aanvoer en plaatsing van keten
-- sanitaire voorzieningen
-- machines en materieel
-- energie en nuts aansluitingen
-- bouwwegen en terrein inrichting
-
-Tijdens uitvoering:
-- onderhoud bouwplaats
-- terreinhuur door aannemer
-- planning en organisatie
-
-Afrekening op basis van voortgang.
-    `;
-  }
-
-  return "Vertaling volgt uit bestek.";
-}
-
 // ===== EXPORT =====
 function exportOZ(){
 
   if(ozData.length === 0){
-    alert("geen data");
+    alert("Geen OZ data");
     return;
   }
 
-  let txt = ozData.map(o =>
-    o.nr + " " + o.title + "\n" +
-    o.desc + "\n" +
-    "Hoeveelheid: " + o.qty + "\n\n"
-  ).join("");
+  let content = ozData.join("\n");
 
-  let blob = new Blob([txt], {type:"text/plain"});
+  let blob = new Blob([content], {type:"text/plain"});
   let a = document.createElement("a");
 
   a.href = URL.createObjectURL(blob);
-  a.download = "OZ.txt";
+  a.download = "OZ_lijst.txt";
   a.click();
 }
 
