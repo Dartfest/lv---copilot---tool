@@ -1,37 +1,144 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>LV Intelligence – Bauabschnitt Engine</title>
+
+<style>
+body { font-family: Arial; margin:0; background:#eef2f7; }
+.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
+.container { padding:20px; }
+
+textarea { width:100%; height:120px; margin-bottom:10px; }
+
+button {
+  padding:8px 12px;
+  background:#2563eb;
+  color:#fff;
+  border:none;
+  cursor:pointer;
+}
+
+.section { background:#fff; padding:15px; margin-top:12px; border-radius:8px; }
+.card { background:#f9fafb; padding:10px; margin-top:8px; border-radius:6px; }
+
+.high { color:#dc2626; }
+.mid { color:#f59e0b; }
+</style>
+</head>
+
+<body>
+
+<div class="header">LV Intelligence – Bauabschnitt Analyse</div>
+
+<div class="container">
+
+<textarea id="lvText" placeholder="Plak LV tekst"></textarea>
+<button onclick="analyse()">Analyse</button>
+
+<div id="out"></div>
+
+</div>
+
 <script>
 
-// ===== PARSE =====
-function parsePhases(t){
+// ===== STRUCTUUR (FIXED) =====
+function buildStructure(t){
 
   let lines = t.split("\n");
-  let phases = [];
+  let result = [];
 
-  lines.forEach(line => {
+  lines.forEach(line=>{
 
     let m = line.match(/(\d+)\.\s*bauabschnitt.*?planstraße\s*([a-z]).*?(teil\s*\d)?/i);
 
     if(m){
-      phases.push({
+
+      result.push({
         nr: parseInt(m[1]),
-        plan: m[2].toUpperCase(),
-        teil: m[3] ? m[3].toUpperCase() : "",
-        name: `Bauabschnitt ${m[1]} - Planstraße ${m[2].toUpperCase()} ${m[3] ? m[3].toUpperCase() : ""}`,
+        name: `Bauabschnitt ${m[1]}`,
+        plan: `Planstraße ${m[2].toUpperCase()} ${m[3] ? m[3].toUpperCase() : ""}`,
+        text: line.toLowerCase()
       });
+
     }
 
   });
 
-  return phases.sort((a,b)=>a.nr-b.nr);
+  return result.sort((a,b)=>a.nr-b.nr);
 }
 
-// ===== CPM PLANNING =====
+// ===== MATERIAAL PER FASE =====
+function extractMaterials(text){
+
+  let matches = text.match(/(dn\s*\d+).*?(pvc|pe|stahl|guss|rohr|leitung)?/gi) || [];
+  let map = {};
+
+  matches.forEach(m=>{
+    let dn = (m.match(/dn\s*\d+/i)||[""])[0].toUpperCase();
+    let type = (m.match(/pvc|pe|stahl|guss|rohr|leitung/i)||["Onbekend"])[0];
+    let key = dn + " " + type;
+
+    map[key] = (map[key]||0)+1;
+  });
+
+  return map;
+}
+
+// ===== RISICO =====
+function analyseRisico(text){
+
+  let r=[], k=[];
+
+  if(text.includes("nicht parallel")){
+    r.push("Geen parallel uitvoering mogelijk");
+    k.push("Fases blokkeren elkaar");
+  }
+
+  if(text.includes("unterbrechung")){
+    r.push("Onderbreking mogelijk");
+    k.push("Stilstand tussen fases");
+  }
+
+  if(text.includes("drittfirmen")){
+    r.push("Afhankelijkheid derden");
+    k.push("Planning afhankelijk van nutsbedrijven");
+  }
+
+  if(text.includes("nicht vergütet")){
+    r.push("Niet vergoede werkzaamheden");
+    k.push("Kosten bij aannemer");
+  }
+
+  return {r,k};
+}
+
+// ===== SAMENVATTING =====
+function summary(b){
+
+  return `
+  ${b.name} omvat werkzaamheden binnen ${b.plan} en vormt een schakel in de totale projectfasering.
+
+  Deze fase kan pas starten na afronding van de voorgaande fase en bepaalt daarmee direct de voortgang van het project.
+  Door de sequentiële uitvoering is er geen ruimte voor vertraging zonder impact op de einddatum.
+
+  Binnen deze fase spelen logistiek, bereikbaarheid en afstemming met andere partijen een belangrijke rol.
+  Indien er sprake is van deeluitvoering (bijv. Teil 1 / Teil 2), vereist dit extra coördinatie binnen dezelfde planstraat.
+
+  Contractuele bepalingen zoals fasering en afhankelijkheden verhogen de complexiteit van uitvoering.
+
+  Conclusie: ${b.name} is kritisch voor planning en vereist strakke sturing.
+  `;
+}
+
+// ===== PLANNING =====
 function buildPlanning(phases){
 
   let current = 0;
 
   return phases.map(p=>{
 
-    let duur = 6; // standaard 6 maanden (aanpasbaar)
+    let duur = 6; // maanden
 
     let start = current;
     let end = start + duur;
@@ -43,13 +150,13 @@ function buildPlanning(phases){
       start,
       end,
       duur,
-      kritisch: true // alles in serie = kritisch
+      kritisch: true
     };
 
   });
 }
 
-// ===== TIJD FORMAT =====
+// ===== DATUM =====
 function format(v){
   let y = Math.floor(v/12);
   let m = v % 12;
@@ -71,14 +178,14 @@ function buildGantt(phases){
       let width = (p.duur / max) * 100;
 
       return `
-      <div style="margin-bottom:12px">
+      <div style="margin-bottom:10px">
 
-        <b>${p.name}</b> 
+        <b>${p.name} - ${p.plan}</b> 
         <span class="high">(Kritiek)</span><br>
+
         ${format(p.start)} → ${format(p.end)} (${p.duur} mnd)
 
         <div style="background:#ddd;height:20px;position:relative;border-radius:4px;">
-
           <div style="
             position:absolute;
             left:${left}%;
@@ -87,7 +194,6 @@ function buildGantt(phases){
             background:#dc2626;
             border-radius:4px;
           "></div>
-
         </div>
 
       </div>
@@ -104,33 +210,44 @@ function analyse(){
   let t = lvText.value.toLowerCase();
   if(!t) return;
 
-  let phases = parsePhases(t);
-  let planning = buildPlanning(phases);
+  let structure = buildStructure(t);
+  let planning = buildPlanning(structure);
 
   out.innerHTML = `
 
-    ${buildGantt(planning)}
+  ${buildGantt(planning)}
 
+  ${planning.map(b=>{
+
+    let ris = analyseRisico(b.text);
+    let mat = extractMaterials(b.text);
+
+    return `
     <div class="section">
-      <h2>Kritieke Pad Analyse</h2>
 
-      <p>
-      Alle fases zijn onderling afhankelijk en worden sequentieel uitgevoerd. 
-      Dit betekent dat er geen parallelle uitvoering mogelijk is en dat elke fase 
-      direct invloed heeft op de totale projectduur.
-      </p>
+      <h2>${b.name} - ${b.plan}</h2>
 
-      <p>
-      Het kritieke pad loopt van Bauabschnitt 1 t/m Bauabschnitt ${phases.length}. 
-      Vertraging in één van deze fases leidt direct tot vertraging van het gehele project.
-      </p>
+      <p>${summary(b)}</p>
 
-      <p class="high">
-      Conclusie: volledige planning is kritisch – geen buffer aanwezig.
-      </p>
+      <h3>Risico’s</h3>
+      <ul>${ris.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+
+      <h3>Knelpunten</h3>
+      <ul>${ris.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
+
+      <h3>Bestellijst</h3>
+      ${Object.entries(mat).map(([k,v])=>`
+        <div class="card">${k} → ${v}x</div>
+      `).join("")}
 
     </div>
+    `;
+  }).join("")}
+
   `;
 }
 
 </script>
+
+</body>
+</html>
