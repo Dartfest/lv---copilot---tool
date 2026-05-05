@@ -2,32 +2,25 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Executive AI Demo</title>
+<title>LV Intelligence – Multi Project Dashboard</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
 .header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
 .container { padding:20px; }
 
-textarea { width:100%; height:140px; margin-bottom:10px; }
+textarea { width:100%; height:120px; margin-bottom:10px; }
 
 button {
-  padding:10px 14px;
+  padding:8px 12px;
   background:#2563eb;
   color:#fff;
   border:none;
   cursor:pointer;
+  margin:3px;
 }
 
-.grid {
-  display:grid;
-  grid-template-columns: repeat(4,1fr);
-  gap:10px;
-  margin-top:10px;
-}
-
-.card { background:#fff; padding:15px; border-radius:8px; }
-.big { font-size:22px; font-weight:bold; }
+.card { background:#fff; padding:10px; border-radius:6px; margin-bottom:8px; }
 
 .high { color:#dc2626; }
 .mid { color:#f59e0b; }
@@ -44,208 +37,170 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Executive Dashboard</div>
+<div class="header">LV Intelligence – Multi Project</div>
 
 <div class="container">
 
-<textarea id="lvText" placeholder="Plak hier LV tekst"></textarea>
+<input type="text" id="projectName" placeholder="Project naam">
+<textarea id="lvText" placeholder="Plak LV tekst"></textarea>
+
 <button onclick="analyse()">Analyse</button>
+<button onclick="saveProject()">Opslaan</button>
 
 <div id="out"></div>
+
+<div class="section">
+  <h3>Opgeslagen projecten</h3>
+  <div id="projectList"></div>
+</div>
+
+<div class="section">
+  <h3>Vergelijking</h3>
+  <div id="compare"></div>
+</div>
 
 </div>
 
 <script>
 
-// ===== DATUM =====
-const monthMap = {
-  "juni":6,"juli":7,"august":8,"mai":5
-};
-
-function extractDates(text){
-  let r=[], regex=/(juni|juli|august|mai)\s+(20\d{2})/gi, m;
-  while((m=regex.exec(text))){
-    r.push({
-      label:m[0],
-      value:parseInt(m[2])*12 + monthMap[m[1]],
-      month:monthMap[m[1]],
-      year:parseInt(m[2])
-    });
-  }
-  return r;
+// ===== STORAGE =====
+function getProjects(){
+  return JSON.parse(localStorage.getItem("projects") || "[]");
 }
 
-// ===== FASES =====
-function extractPhases(text){
-  let valid=["c","d","e"];
-  let r=[], regex=/(\d)\.\s*bauabschnitt.*?planstraße\s*([a-z])/gi, m;
-
-  while((m=regex.exec(text))){
-    if(valid.includes(m[2].toLowerCase())){
-      r.push({
-        id:parseInt(m[1]),
-        name:`Fase ${m[1]} - Planstraat ${m[2].toUpperCase()}`
-      });
-    }
-  }
-  return r;
+function saveProjects(p){
+  localStorage.setItem("projects", JSON.stringify(p));
 }
 
-// ===== PLANNING =====
-function buildPlanning(text){
-  let dates=extractDates(text);
-  let phases=extractPhases(text);
+// ===== ANALYSE CORE =====
+function analyseCore(text){
 
-  phases.forEach((p,i)=>{
-    p.start=dates[i];
-    p.end=dates[i+1] || dates[dates.length-1];
-    p.duration=p.end.value - p.start.value;
-  });
+  let risicoCount = 0;
 
-  return phases;
-}
+  if(text.includes("nicht vergütet")) risicoCount+=2;
+  if(text.includes("unterbrechung")) risicoCount+=2;
+  if(text.includes("nicht parallel")) risicoCount+=1;
+  if(text.includes("drittfirmen")) risicoCount+=1;
 
-// ===== RISICO =====
-function analyseRisico(text){
+  let fases = (text.match(/bauabschnitt/gi) || []).length;
 
-  let r={
-    contract:[],
-    planning:[],
-    uitvoering:[],
-    financieel:[],
-    coordinatie:[]
-  };
+  let roi = 100 - (risicoCount * 10);
 
-  if(text.includes("nicht vergütet")){
-    r.contract.push("Niet vergoede werkzaamheden");
-    r.financieel.push("Kosten voor aannemer");
-  }
+  let advies = "GO";
+  let cls="good";
 
-  if(text.includes("unterbrechung")){
-    r.planning.push("Onderbreking zonder vergoeding");
-    r.financieel.push("Stilstand kosten");
-  }
-
-  if(text.includes("nicht parallel")){
-    r.planning.push("Geen parallel uitvoering");
-  }
-
-  if(text.includes("drittfirmen")){
-    r.uitvoering.push("Afhankelijkheid derden");
-    r.coordinatie.push("Afstemming nutsbedrijven");
-  }
-
-  return r;
-}
-
-// ===== ROI =====
-function calculateROI(r){
-
-  let model = {
-    contract:{impact:50000,kans:0.6},
-    planning:{impact:30000,kans:0.5},
-    uitvoering:{impact:20000,kans:0.4},
-    financieel:{impact:40000,kans:0.6},
-    coordinatie:{impact:15000,kans:0.5}
-  };
-
-  let totaal=0;
-
-  for(let k in r){
-    let count=r[k].length;
-    if(model[k]){
-      totaal += count * model[k].impact * model[k].kans;
-    }
-  }
-
-  let besparing = totaal * 0.4;
-  let investering = 10000;
-  let roi = ((besparing - investering)/investering)*100;
+  if(roi < 50){ advies="NO-GO"; cls="high"; }
+  else if(roi < 70){ advies="GO MET RISICO"; cls="mid"; }
 
   return {
-    risicoKosten: Math.round(totaal),
-    besparing: Math.round(besparing),
-    investering,
-    roi: Math.round(roi)
+    fases,
+    risico:risicoCount,
+    roi,
+    advies,
+    cls
   };
 }
 
-// ===== TOP RISICO =====
-function topRisico(r){
+// ===== UI ANALYSE =====
+let lastAnalysis = null;
 
-  let lijst = [];
-
-  Object.entries(r).forEach(([type,items])=>{
-    items.forEach(i=>{
-      lijst.push({tekst:i,type});
-    });
-  });
-
-  return lijst.slice(0,3);
-}
-
-// ===== GO / NO GO =====
-function goNoGo(risico, roi){
-
-  let total = Object.values(risico).flat().length;
-
-  if(total > 5 || roi.roi < 0){
-    return {advies:"NO-GO", class:"high"};
-  }
-
-  if(total > 3){
-    return {advies:"GO MET RISICO", class:"mid"};
-  }
-
-  return {advies:"GO", class:"good"};
-}
-
-// ===== MAIN =====
 function analyse(){
 
-  let t = lvText.value.toLowerCase();
-  if(!t) return;
+  let text = lvText.value.toLowerCase();
+  if(!text) return;
 
-  let planning = buildPlanning(t);
-  let risico = analyseRisico(t);
-  let roi = calculateROI(risico);
-  let top = topRisico(risico);
-  let advies = goNoGo(risico, roi);
+  let res = analyseCore(text);
+  lastAnalysis = res;
 
   out.innerHTML = `
-
-  <div class="grid">
-    <div class="card"><div>Fases</div><div class="big">${planning.length}</div></div>
-    <div class="card"><div>Risico’s</div><div class="big high">${Object.values(risico).flat().length}</div></div>
-    <div class="card"><div>ROI</div><div class="big">${roi.roi}%</div></div>
-    <div class="card"><div>Advies</div><div class="big ${advies.class}">${advies.advies}</div></div>
-  </div>
-
-  <div class="section">
-    <h3>Executive Samenvatting</h3>
-    <p>
-    Project met gefaseerde uitvoering en duidelijke afhankelijkheden.
-    Belangrijkste risico’s zitten in contract en externe partijen.
-    Besluitvorming vereist focus op risicobeheersing.
-    </p>
-  </div>
-
-  <div class="section">
-    <h3>Top Risico’s</h3>
-    <ul>
-      ${top.map(r=>`<li class="high">${r.tekst}</li>`).join("")}
-    </ul>
-  </div>
-
-  <div class="section">
-    <h3>Financiële Impact</h3>
-    <p>Risico waarde: <b class="high">€ ${roi.risicoKosten.toLocaleString()}</b></p>
-    <p>Besparing: € ${roi.besparing.toLocaleString()}</p>
-    <p>Investering: € ${roi.investering.toLocaleString()}</p>
-  </div>
-
+    <div class="card">
+      Fases: ${res.fases}<br>
+      Risico: <span class="high">${res.risico}</span><br>
+      ROI: ${res.roi}%<br>
+      Advies: <span class="${res.cls}">${res.advies}</span>
+    </div>
   `;
 }
+
+// ===== OPSLAAN =====
+function saveProject(){
+
+  if(!lastAnalysis){
+    alert("Eerst analyseren");
+    return;
+  }
+
+  let name = projectName.value || "Project";
+
+  let projects = getProjects();
+
+  projects.push({
+    name,
+    ...lastAnalysis
+  });
+
+  saveProjects(projects);
+
+  renderProjects();
+}
+
+// ===== LIJST =====
+function renderProjects(){
+
+  let projects = getProjects();
+
+  projectList.innerHTML = projects.map((p,i)=>`
+    <div class="card">
+      <b>${p.name}</b><br>
+      ROI: ${p.roi}% |
+      <span class="${p.cls}">${p.advies}</span>
+      <br>
+      <button onclick="addCompare(${i})">Vergelijk</button>
+    </div>
+  `).join("");
+}
+
+// ===== VERGELIJK =====
+let compareList = [];
+
+function addCompare(i){
+  compareList.push(getProjects()[i]);
+  renderCompare();
+}
+
+function renderCompare(){
+
+  if(compareList.length===0){
+    compare.innerHTML="Geen selectie";
+    return;
+  }
+
+  compare.innerHTML = `
+  <table border="1" cellpadding="5">
+    <tr>
+      <th>Project</th>
+      <th>Fases</th>
+      <th>Risico</th>
+      <th>ROI</th>
+      <th>Advies</th>
+    </tr>
+
+    ${compareList.map(p=>`
+      <tr>
+        <td>${p.name}</td>
+        <td>${p.fases}</td>
+        <td class="high">${p.risico}</td>
+        <td>${p.roi}%</td>
+        <td class="${p.cls}">${p.advies}</td>
+      </tr>
+    `).join("")}
+
+  </table>
+  `;
+}
+
+// INIT
+renderProjects();
 
 </script>
 
