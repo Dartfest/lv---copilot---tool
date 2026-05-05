@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Directie Tool</title>
+<title>LV Intelligence – Directie Analyse + OZ</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,7 +17,7 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
-  margin:5px 5px 5px 0;
+  margin-right:5px;
 }
 
 .section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
@@ -27,7 +27,7 @@ button {
 
 .oz {
   background:#f9fafb;
-  padding:15px;
+  padding:12px;
   margin-top:10px;
   border-radius:6px;
   border-left:4px solid #2563eb;
@@ -37,7 +37,7 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Directie Analyse + OZ Pro</div>
+<div class="header">LV Intelligence – Directie Analyse</div>
 
 <div class="container">
 
@@ -90,7 +90,7 @@ async function handlePDF(file){
     reader.readAsArrayBuffer(file);
 
   }catch(e){
-    alert("PDF fout: "+e);
+    alert("PDF fout: " + e);
   }
 }
 
@@ -105,7 +105,7 @@ function analyse(){
   <div class="section">
     <h2>Kritieke Pad</h2>
     <p class="high">BA1 → BA2 → BA3 → BA4</p>
-    <p>Geen parallel uitvoering mogelijk → volledige afhankelijkheid</p>
+    <p>Geen parallel uitvoering mogelijk – volledige afhankelijkheid</p>
   </div>
   `;
 
@@ -115,7 +115,7 @@ function analyse(){
 // ===== OZ DATA =====
 let ozData = [];
 
-// ===== OZ EXTRACT =====
+// ===== OZ EXTRACT (FIXED & REAL) =====
 function extractOZ(){
 
   let text = lvText.value;
@@ -126,7 +126,8 @@ function extractOZ(){
 
   lines.forEach(line => {
 
-    if(line.match(/^\s*\d+(\.\d+)*\.?/)){
+    // detecteer OZ regel (zoals 1.1.10.)
+    if(line.match(/^\s*\d+(\.\d+)*\.?\s*$/) || line.match(/^\s*\d+(\.\d+)+/)){
 
       if(current) ozData.push(current);
 
@@ -136,6 +137,7 @@ function extractOZ(){
       };
 
     } else if(current){
+
       current.desc += " " + line.trim();
     }
 
@@ -146,10 +148,10 @@ function extractOZ(){
   renderOZ();
 }
 
-// ===== RENDER OZ =====
+// ===== RENDER =====
 function renderOZ(){
 
-  let html = `<div class="section"><h2>OZ Analyse (Directie niveau)</h2>`;
+  let html = `<div class="section"><h2>OZ Analyse</h2>`;
 
   ozData.forEach(item=>{
 
@@ -159,15 +161,15 @@ function renderOZ(){
     html += `
     <div class="oz">
 
-      <h3>${item.title}</h3>
+      <b>${item.title}</b><br><br>
 
-      <b>Duits (origineel):</b><br>
-      ${item.desc}<br><br>
+      <b>Duits:</b><br>
+      ${item.desc || "Geen omschrijving"}<br><br>
 
-      <b>Nederlands (samengevat):</b><br>
+      <b>Nederlands:</b><br>
       ${nl}<br><br>
 
-      <b>Uitleg / impact:</b><br>
+      <b>Uitleg:</b><br>
       ${uitleg}
 
     </div>
@@ -182,42 +184,33 @@ function renderOZ(){
 // ===== SLIMME VERTALING =====
 function translateSmart(text){
 
-  if(!text) return "Geen tekst";
+  if(!text) return "";
 
-  if(text.toLowerCase().includes("baustelle einrichten")){
-    return `
-Het inrichten en operationeel houden van de bouwplaats,
-inclusief het plaatsen van bouwketen, sanitaire voorzieningen,
-machines en alle benodigde installaties.
+  let t = text.toLowerCase();
 
-Daarnaast omvat dit het realiseren van energievoorzieningen,
-toegangswegen en terreinverhardingen gedurende de volledige bouwperiode.
-    `;
+  if(t.includes("baustelle einrichten")){
+    return "Inrichten en operationeel houden van de bouwplaats inclusief alle benodigde voorzieningen, installaties en logistiek.";
   }
 
-  return `
-Uitvoeren van civieltechnische werkzaamheden volgens bestek,
-inclusief levering, aanleg en afwerking van alle benodigde onderdelen.
-  `;
+  if(t.includes("verlegen")){
+    return "Aanleggen en installeren van leidingen en infrastructuur volgens bestek.";
+  }
+
+  return "Uitvoeren van werkzaamheden volgens bestek en technische eisen.";
 }
 
 // ===== UITLEG =====
 function explainSmart(text){
 
-  if(text.toLowerCase().includes("baustelle einrichten")){
-    return `
-De aannemer draagt volledige verantwoordelijkheid voor de inrichting en exploitatie van de bouwplaats.
-Alle kosten voor voorzieningen, logistiek en beheer zitten in deze post.
+  if(!text) return "";
 
-Belangrijk risico:
-onderschatting leidt direct tot kostenoverschrijding omdat dit geen aparte vergoeding krijgt.
-    `;
+  let t = text.toLowerCase();
+
+  if(t.includes("baustelle einrichten")){
+    return "De aannemer is volledig verantwoordelijk voor de inrichting en het beheer van de bouwplaats. Alle kosten en logistiek vallen binnen deze post.";
   }
 
-  return `
-Deze post betreft reguliere uitvoeringswerkzaamheden binnen het project.
-De impact zit voornamelijk in planning, uitvoering en afstemming.
-  `;
+  return "Deze post heeft invloed op uitvoering, planning en kostenbeheersing.";
 }
 
 // ===== EXPORT =====
@@ -229,10 +222,10 @@ function exportOZ(){
   }
 
   let content = ozData.map(item =>
-    item.title + "\n\n" +
-    "DUITS:\n" + item.desc + "\n\n" +
-    "NL:\n" + translateSmart(item.desc) + "\n\n" +
-    "UITLEG:\n" + explainSmart(item.desc) + "\n\n-----------------\n"
+    item.title + "\n" +
+    item.desc + "\n" +
+    "NL: " + translateSmart(item.desc) + "\n" +
+    "UITLEG: " + explainSmart(item.desc) + "\n\n"
   ).join("");
 
   let blob = new Blob([content], {type:"text/plain"});
