@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Pro Engine</title>
+<title>LV Intelligence – Final Pro</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -37,7 +37,7 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Pro Engine</div>
+<div class="header">LV Intelligence – Final Engine</div>
 
 <div class="container">
 
@@ -48,19 +48,8 @@ button {
 <textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="analyse()">Analyse</button>
-<button onclick="saveProject()">Opslaan</button>
 
 <div id="out"></div>
-
-<div class="section">
-<h3>Projecten</h3>
-<div id="projectList"></div>
-</div>
-
-<div class="section">
-<h3>Vergelijking</h3>
-<div id="compare"></div>
-</div>
 
 </div>
 
@@ -116,98 +105,95 @@ function extractDates(t){
   return r;
 }
 
-// ===== FASE =====
-function extractPhases(t){
-  let r=[], m;
-  let regex=/(\d)\.\s*bauabschnitt.*?planstraße\s*([a-z])/gi;
+// ===== FASE STRUCTUUR =====
+function buildRealPhases(t){
 
-  while((m=regex.exec(t))){
-    r.push({
-      id:parseInt(m[1]),
-      letter:m[2].toUpperCase(),
-      name:`Fase ${m[1]} - ${m[2].toUpperCase()}`
-    });
-  }
+  let dates = extractDates(t);
 
-  return r;
-}
-
-// ===== FASE + PLANNING + RISICO =====
-function analysePhases(t){
-
-  let phases=extractPhases(t);
-  let dates=extractDates(t);
+  let phases = [
+    { name:"Planstraße C" },
+    { name:"Planstraße E" },
+    { name:"Planstraße D – Teil 1" },
+    { name:"Planstraße D – Teil 2" }
+  ];
 
   return phases.map((p,i)=>{
 
-    let start=dates[i] || 0;
-    let end=dates[i+1] || start+6;
-    let duur=end-start;
+    let start = dates[i] || dates[0] || 0;
+    let end = dates[i+1] || (start + 6);
 
     let risico=[];
     let aandacht=[];
-
-    if(i>0){
-      aandacht.push("Afhankelijk van vorige fase");
-    }
 
     if(t.includes("nicht parallel")){
       risico.push("Geen parallel uitvoering mogelijk");
     }
 
     if(t.includes("unterbrechung")){
-      risico.push("Onderbreking mogelijk tussen fases");
+      risico.push("Onderbreking tussen fases mogelijk");
     }
 
     if(t.includes("drittfirmen")){
-      risico.push("Afhankelijk van derden");
+      risico.push("Afhankelijkheid van nutsbedrijven");
+      aandacht.push("Afstemming met derden noodzakelijk");
     }
 
     if(t.includes("nicht vergütet")){
-      risico.push("Niet vergoede werkzaamheden");
+      risico.push("Niet vergoede werkzaamheden binnen deze fase");
     }
 
-    let kritisch = duur > 6 || risico.length > 2;
+    // fase-specifiek
+    if(p.name.includes("D – Teil 2")){
+      aandacht.push("Afrondende fase met verhoogde coördinatie");
+    }
 
     return {
       ...p,
-      duur,
-      afhankelijk: i>0 ? phases[i-1].name : "Start",
+      start,
+      end,
+      duur: end - start,
       risico,
-      aandacht,
-      kritisch
+      aandacht
     };
+
   });
 }
 
-// ===== PROJECT ANALYSE =====
-function projectAnalyse(phases){
+// ===== DATUM FORMAT =====
+function formatDate(v){
+  let y = Math.floor(v/12);
+  let m = v % 12;
+  return `${m}/${y}`;
+}
 
-  let tekst=[];
+// ===== SAMENVATTING PER FASE =====
+function faseSamenvatting(f){
 
-  tekst.push("Het project bestaat uit meerdere gefaseerde Bauabschnitte.");
+  let txt = [];
 
-  if(phases.some(p=>p.kritisch)){
-    tekst.push("Er zijn kritieke fases aanwezig met verhoogd risico.");
+  txt.push("Uitvoering binnen deze fase volgens LV-fasering.");
+
+  if(f.risico.length > 0){
+    txt.push("Aanwezige risico’s beïnvloeden planning en uitvoering.");
   }
 
-  if(phases.length>2){
-    tekst.push("De planning is afhankelijk van opvolgende fasen zonder overlap.");
+  if(f.aandacht.length > 0){
+    txt.push("Extra aandacht vereist voor afstemming en uitvoering.");
   }
 
-  tekst.push("Succesfactor ligt in strakke planning en coördinatie.");
+  if(f.naam?.includes("D")){
+    txt.push("Gefaseerde uitvoering binnen dezelfde planstraat.");
+  }
 
-  return tekst;
+  return txt;
 }
 
 // ===== SCORE =====
 function calcScore(phases){
-
   let risico = phases.reduce((a,p)=>a+p.risico.length,0);
   let roi = 100 - (risico * 5);
 
   let advies="GO", cls="good";
-
   if(roi<50){advies="NO-GO";cls="high";}
   else if(roi<70){advies="GO MET RISICO";cls="mid";}
 
@@ -215,113 +201,56 @@ function calcScore(phases){
 }
 
 // ===== MAIN =====
-let lastData=null;
-
 function analyse(){
 
-  let t=lvText.value.toLowerCase();
+  let t = lvText.value.toLowerCase();
   if(!t) return;
 
-  let phases=analysePhases(t);
-  let analyseTxt=projectAnalyse(phases);
-  let score=calcScore(phases);
+  let phases = buildRealPhases(t);
+  let score = calcScore(phases);
 
-  lastData={phases,...score};
-
-  out.innerHTML=`
+  out.innerHTML = `
 
   <div class="card">
-  Risico: <span class="high">${score.risico}</span><br>
-  ROI: ${score.roi}%<br>
-  Advies: <span class="${score.cls}">${score.advies}</span>
+    Risico: <span class="high">${score.risico}</span><br>
+    ROI: ${score.roi}%<br>
+    Advies: <span class="${score.cls}">${score.advies}</span>
   </div>
 
   <div class="section">
-  <h3>Integrale Analyse</h3>
-  <ul>${analyseTxt.map(x=>`<li>${x}</li>`).join("")}</ul>
-  </div>
+    <h3>Fase Analyse (Realistisch)</h3>
 
-  <div class="section">
-  <h3>Fase Analyse</h3>
+    ${phases.map(f=>`
+      <div class="card">
 
-  ${phases.map(p=>`
-    <div class="card">
-      <b>${p.name}</b><br>
-      Duur: ${p.duur} mnd<br>
-      Afhankelijk: ${p.afhankelijk}<br>
-      ${p.kritisch ? '<span class="high">Kritieke fase</span>' : ''}
+        <b>${f.name}</b><br>
+        Periode: ${formatDate(f.start)} → ${formatDate(f.end)}<br>
+        Duur: ${f.duur} mnd
 
-      <br><br>
-      <b>Risico</b>
-      <ul>${p.risico.map(r=>`<li class="high">${r}</li>`).join("")}</ul>
+        <br><br>
 
-      <b>Aandacht</b>
-      <ul>${p.aandacht.map(a=>`<li class="mid">${a}</li>`).join("")}</ul>
+        <b>Samenvatting</b>
+        <ul>
+          ${faseSamenvatting(f).map(x=>`<li>${x}</li>`).join("")}
+        </ul>
 
-    </div>
-  `).join("")}
+        <b>Risico’s</b>
+        <ul>
+          ${f.risico.map(r=>`<li class="high">${r}</li>`).join("")}
+        </ul>
 
-  </div>
-  `;
-}
+        <b>Aandachtspunten</b>
+        <ul>
+          ${f.aandacht.map(a=>`<li class="mid">${a}</li>`).join("")}
+        </ul>
 
-// ===== STORAGE =====
-function getProjects(){
-  return JSON.parse(localStorage.getItem("projects")||"[]");
-}
-
-function saveProject(){
-  if(!lastData) return;
-
-  let name=projectName.value||"Project";
-  let p=getProjects();
-
-  p.push({name,...lastData});
-  localStorage.setItem("projects",JSON.stringify(p));
-
-  renderProjects();
-}
-
-function renderProjects(){
-
-  let p=getProjects();
-
-  projectList.innerHTML=p.map((x,i)=>`
-    <div class="card">
-      <b>${x.name}</b><br>
-      ROI: ${x.roi}% |
-      <span class="${x.cls}">${x.advies}</span>
-      <br>
-      <button onclick="addCompare(${i})">Vergelijk</button>
-    </div>
-  `).join("");
-}
-
-// ===== COMPARE =====
-let compareList=[];
-
-function addCompare(i){
-  compareList.push(getProjects()[i]);
-  renderCompare();
-}
-
-function renderCompare(){
-
-  compare.innerHTML=`
-  <table border="1">
-    <tr><th>Project</th><th>Risico</th><th>ROI</th><th>Advies</th></tr>
-    ${compareList.map(p=>`
-      <tr>
-        <td>${p.name}</td>
-        <td class="high">${p.risico}</td>
-        <td>${p.roi}%</td>
-        <td class="${p.cls}">${p.advies}</td>
-      </tr>
+      </div>
     `).join("")}
+
+  </div>
+
   `;
 }
-
-renderProjects();
 
 </script>
 
