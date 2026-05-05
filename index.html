@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Smart Engine</title>
+<title>LV Intelligence – Pro Engine</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -20,7 +20,7 @@ button {
   margin:3px;
 }
 
-.card { background:#fff; padding:10px; border-radius:6px; margin-bottom:8px; }
+.card { background:#fff; padding:12px; border-radius:6px; margin-bottom:10px; }
 
 .high { color:#dc2626; }
 .mid { color:#f59e0b; }
@@ -37,12 +37,11 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Smart Analysis</div>
+<div class="header">LV Intelligence – Pro Engine</div>
 
 <div class="container">
 
-<input type="file" id="pdfFile" accept=".pdf">
-<br><br>
+<input type="file" id="pdfFile" accept=".pdf"><br><br>
 
 <input type="text" id="projectName" placeholder="Project naam">
 
@@ -54,190 +53,251 @@ button {
 <div id="out"></div>
 
 <div class="section">
-  <h3>Projecten</h3>
-  <div id="projectList"></div>
+<h3>Projecten</h3>
+<div id="projectList"></div>
 </div>
 
 <div class="section">
-  <h3>Vergelijking</h3>
-  <div id="compare"></div>
+<h3>Vergelijking</h3>
+<div id="compare"></div>
 </div>
 
 </div>
 
 <script>
 
-// ===== SCRIPT LOADER =====
+// ===== PDF =====
 function loadScript(url){
-  return new Promise((res,rej)=>{
+  return new Promise(res=>{
     let s=document.createElement("script");
     s.src=url;
     s.onload=res;
-    s.onerror=rej;
     document.body.appendChild(s);
   });
 }
 
-// ===== PDF =====
 async function handlePDF(file){
-  try{
-    if(typeof pdfjsLib === "undefined"){
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+  if(typeof pdfjsLib==="undefined"){
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+  }
+
+  let reader=new FileReader();
+  reader.onload=async function(){
+    let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+    let text="";
+
+    for(let i=1;i<=pdf.numPages;i++){
+      let page=await pdf.getPage(i);
+      let c=await page.getTextContent();
+      text+=c.items.map(i=>i.str).join(" ")+"\n";
     }
 
-    const reader = new FileReader();
-
-    reader.onload = async function(){
-      const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-      let text="";
-
-      for(let i=1;i<=pdf.numPages;i++){
-        let page = await pdf.getPage(i);
-        let content = await page.getTextContent();
-        text += content.items.map(i=>i.str).join(" ") + "\n";
-      }
-
-      lvText.value = text;
-    };
-
-    reader.readAsArrayBuffer(file);
-
-  } catch(e){
-    alert("PDF lezen mislukt");
-  }
-}
-
-pdfFile.addEventListener("change", e=>{
-  if(e.target.files[0]) handlePDF(e.target.files[0]);
-});
-
-
-// ===== SECTIE HERKENNING =====
-function detectSections(text){
-
-  return {
-    planning: text.match(/bauablauf|bauzeit|erschließung/gi) || [],
-    contract: text.match(/vergütet|vergütung|kosten/gi) || [],
-    risico: text.match(/unterbrechung|nicht|verzug/gi) || [],
-    derden: text.match(/drittfirmen|versorgung/gi) || []
+    lvText.value=text;
   };
+
+  reader.readAsArrayBuffer(file);
 }
 
+pdfFile.onchange=e=>{
+  if(e.target.files[0]) handlePDF(e.target.files[0]);
+};
 
-// ===== ANALYSE CORE =====
-function analyseCore(text){
+// ===== DATUM =====
+const months = {juni:6,juli:7,august:8,mai:5};
 
-  let sections = detectSections(text);
+function extractDates(t){
+  let r=[], m;
+  let regex=/(juni|juli|august|mai)\s+(20\d{2})/gi;
 
-  let risicoScore =
-    sections.risico.length +
-    sections.contract.length +
-    sections.derden.length;
+  while((m=regex.exec(t))){
+    r.push(parseInt(m[2])*12 + months[m[1]]);
+  }
 
-  let fases = (text.match(/bauabschnitt/gi) || []).length;
+  return r;
+}
 
-  let roi = 100 - (risicoScore * 5);
+// ===== FASE =====
+function extractPhases(t){
+  let r=[], m;
+  let regex=/(\d)\.\s*bauabschnitt.*?planstraße\s*([a-z])/gi;
+
+  while((m=regex.exec(t))){
+    r.push({
+      id:parseInt(m[1]),
+      letter:m[2].toUpperCase(),
+      name:`Fase ${m[1]} - ${m[2].toUpperCase()}`
+    });
+  }
+
+  return r;
+}
+
+// ===== FASE + PLANNING + RISICO =====
+function analysePhases(t){
+
+  let phases=extractPhases(t);
+  let dates=extractDates(t);
+
+  return phases.map((p,i)=>{
+
+    let start=dates[i] || 0;
+    let end=dates[i+1] || start+6;
+    let duur=end-start;
+
+    let risico=[];
+    let aandacht=[];
+
+    if(i>0){
+      aandacht.push("Afhankelijk van vorige fase");
+    }
+
+    if(t.includes("nicht parallel")){
+      risico.push("Geen parallel uitvoering mogelijk");
+    }
+
+    if(t.includes("unterbrechung")){
+      risico.push("Onderbreking mogelijk tussen fases");
+    }
+
+    if(t.includes("drittfirmen")){
+      risico.push("Afhankelijk van derden");
+    }
+
+    if(t.includes("nicht vergütet")){
+      risico.push("Niet vergoede werkzaamheden");
+    }
+
+    let kritisch = duur > 6 || risico.length > 2;
+
+    return {
+      ...p,
+      duur,
+      afhankelijk: i>0 ? phases[i-1].name : "Start",
+      risico,
+      aandacht,
+      kritisch
+    };
+  });
+}
+
+// ===== PROJECT ANALYSE =====
+function projectAnalyse(phases){
+
+  let tekst=[];
+
+  tekst.push("Het project bestaat uit meerdere gefaseerde Bauabschnitte.");
+
+  if(phases.some(p=>p.kritisch)){
+    tekst.push("Er zijn kritieke fases aanwezig met verhoogd risico.");
+  }
+
+  if(phases.length>2){
+    tekst.push("De planning is afhankelijk van opvolgende fasen zonder overlap.");
+  }
+
+  tekst.push("Succesfactor ligt in strakke planning en coördinatie.");
+
+  return tekst;
+}
+
+// ===== SCORE =====
+function calcScore(phases){
+
+  let risico = phases.reduce((a,p)=>a+p.risico.length,0);
+  let roi = 100 - (risico * 5);
 
   let advies="GO", cls="good";
 
-  if(roi < 50){ advies="NO-GO"; cls="high"; }
-  else if(roi < 70){ advies="GO MET RISICO"; cls="mid"; }
+  if(roi<50){advies="NO-GO";cls="high";}
+  else if(roi<70){advies="GO MET RISICO";cls="mid";}
 
-  return {
-    fases,
-    risico: risicoScore,
-    roi,
-    advies,
-    cls,
-    sections
-  };
+  return {risico,roi,advies,cls};
 }
 
-
-// ===== UI =====
-let lastAnalysis = null;
+// ===== MAIN =====
+let lastData=null;
 
 function analyse(){
 
-  let text = lvText.value.toLowerCase();
-  if(!text) return;
+  let t=lvText.value.toLowerCase();
+  if(!t) return;
 
-  let res = analyseCore(text);
-  lastAnalysis = res;
+  let phases=analysePhases(t);
+  let analyseTxt=projectAnalyse(phases);
+  let score=calcScore(phases);
 
-  out.innerHTML = `
+  lastData={phases,...score};
+
+  out.innerHTML=`
 
   <div class="card">
-    Fases: ${res.fases}<br>
-    Risico score: <span class="high">${res.risico}</span><br>
-    ROI: ${res.roi}%<br>
-    Advies: <span class="${res.cls}">${res.advies}</span>
+  Risico: <span class="high">${score.risico}</span><br>
+  ROI: ${score.roi}%<br>
+  Advies: <span class="${score.cls}">${score.advies}</span>
   </div>
 
   <div class="section">
-    <h3>Gedetecteerde Secties</h3>
-
-    <b>Planning (${res.sections.planning.length})</b><br>
-    <b>Contract (${res.sections.contract.length})</b><br>
-    <b>Risico (${res.sections.risico.length})</b><br>
-    <b>Derden (${res.sections.derden.length})</b>
-
+  <h3>Integrale Analyse</h3>
+  <ul>${analyseTxt.map(x=>`<li>${x}</li>`).join("")}</ul>
   </div>
 
+  <div class="section">
+  <h3>Fase Analyse</h3>
+
+  ${phases.map(p=>`
+    <div class="card">
+      <b>${p.name}</b><br>
+      Duur: ${p.duur} mnd<br>
+      Afhankelijk: ${p.afhankelijk}<br>
+      ${p.kritisch ? '<span class="high">Kritieke fase</span>' : ''}
+
+      <br><br>
+      <b>Risico</b>
+      <ul>${p.risico.map(r=>`<li class="high">${r}</li>`).join("")}</ul>
+
+      <b>Aandacht</b>
+      <ul>${p.aandacht.map(a=>`<li class="mid">${a}</li>`).join("")}</ul>
+
+    </div>
+  `).join("")}
+
+  </div>
   `;
 }
 
-
 // ===== STORAGE =====
 function getProjects(){
-  return JSON.parse(localStorage.getItem("projects") || "[]");
+  return JSON.parse(localStorage.getItem("projects")||"[]");
 }
 
-function saveProjects(p){
-  localStorage.setItem("projects", JSON.stringify(p));
-}
-
-
-// ===== OPSLAAN =====
 function saveProject(){
+  if(!lastData) return;
 
-  if(!lastAnalysis){
-    alert("Eerst analyseren");
-    return;
-  }
+  let name=projectName.value||"Project";
+  let p=getProjects();
 
-  let name = projectName.value || "Project";
+  p.push({name,...lastData});
+  localStorage.setItem("projects",JSON.stringify(p));
 
-  let projects = getProjects();
-
-  projects.push({
-    name,
-    ...lastAnalysis
-  });
-
-  saveProjects(projects);
   renderProjects();
 }
 
-
-// ===== LIJST =====
 function renderProjects(){
 
-  let projects = getProjects();
+  let p=getProjects();
 
-  projectList.innerHTML = projects.map((p,i)=>`
+  projectList.innerHTML=p.map((x,i)=>`
     <div class="card">
-      <b>${p.name}</b><br>
-      ROI: ${p.roi}% |
-      <span class="${p.cls}">${p.advies}</span>
+      <b>${x.name}</b><br>
+      ROI: ${x.roi}% |
+      <span class="${x.cls}">${x.advies}</span>
       <br>
       <button onclick="addCompare(${i})">Vergelijk</button>
     </div>
   `).join("");
 }
 
-
-// ===== VERGELIJK =====
+// ===== COMPARE =====
 let compareList=[];
 
 function addCompare(i){
@@ -247,37 +307,20 @@ function addCompare(i){
 
 function renderCompare(){
 
-  if(compareList.length===0){
-    compare.innerHTML="Geen selectie";
-    return;
-  }
-
   compare.innerHTML=`
-  <table border="1" cellpadding="5">
-    <tr>
-      <th>Project</th>
-      <th>Fases</th>
-      <th>Risico</th>
-      <th>ROI</th>
-      <th>Advies</th>
-    </tr>
-
+  <table border="1">
+    <tr><th>Project</th><th>Risico</th><th>ROI</th><th>Advies</th></tr>
     ${compareList.map(p=>`
       <tr>
         <td>${p.name}</td>
-        <td>${p.fases}</td>
         <td class="high">${p.risico}</td>
         <td>${p.roi}%</td>
         <td class="${p.cls}">${p.advies}</td>
       </tr>
     `).join("")}
-
-  </table>
   `;
 }
 
-
-// INIT
 renderProjects();
 
 </script>
