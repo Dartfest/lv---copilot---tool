@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Executive Report</title>
+<title>LV Intelligence – Ultimate Engine</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,7 +17,6 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
-  margin-right:5px;
 }
 
 .card { background:#fff; padding:15px; border-radius:6px; margin-bottom:12px; }
@@ -36,7 +35,7 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Directie Dashboard</div>
+<div class="header">LV Intelligence – Ultimate Analyse Tool</div>
 
 <div class="container">
 
@@ -45,7 +44,6 @@ button {
 <textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="analyse()">Analyse</button>
-<button onclick="exportPDF()">Export PDF</button>
 
 <div id="out"></div>
 
@@ -53,7 +51,7 @@ button {
 
 <script>
 
-// ===== PDF INLEZEN =====
+// ===== PDF =====
 function loadScript(url){
   return new Promise(res=>{
     let s=document.createElement("script");
@@ -90,178 +88,74 @@ pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
-// ===== DATUM =====
-const months = {juni:6,juli:7,august:8,mai:5};
-
-function extractDates(t){
-  let r=[], m;
-  let regex=/(juni|juli|august|mai)\s+(20\d{2})/gi;
-
-  while((m=regex.exec(t))){
-    r.push(parseInt(m[2])*12 + months[m[1]]);
-  }
-
-  return r;
-}
-
 // ===== PLANSTRASSE =====
 function detectPlanstrassen(t){
-  let matches = t.match(/planstraße\s*[a-z]/gi) || [];
-  let unique = [...new Set(matches.map(m=>m.toLowerCase()))];
-  return unique.map(p=>p.toUpperCase());
+  let m = t.match(/planstraße\s*[a-z]/gi) || [];
+  return [...new Set(m.map(x=>x.toUpperCase()))];
 }
 
-// ===== TEIL =====
-function detectTeil(t, plan){
-  let regex = new RegExp(plan.toLowerCase() + ".*?teil\\s*\\d","gi");
-  let match = t.match(regex);
+// ===== BESTELLIJST =====
+function extractMaterials(t){
 
-  if(!match) return [plan];
+  let matches = t.match(/dn\s*\d+/gi) || [];
 
-  return match.map((x,i)=>`${plan} - TEIL ${i+1}`);
-}
+  let map = {};
 
-// ===== FASES =====
-function buildPhases(t){
-
-  let plans = detectPlanstrassen(t);
-  let phases=[];
-
-  plans.forEach(p=>{
-    let delen = detectTeil(t,p);
-    delen.forEach(d=>{
-      phases.push({ name:d });
-    });
+  matches.forEach(m=>{
+    let key = m.toUpperCase();
+    map[key] = (map[key] || 0) + 1;
   });
 
-  return phases;
-}
-
-// ===== DATUM =====
-function attachDates(phases,t){
-
-  let dates = extractDates(t);
-
-  return phases.map((p,i)=>{
-
-    let start = dates[i] || dates[0] || 0;
-    let end = dates[i+1] || start + 6;
-
-    return {
-      ...p,
-      start,
-      end,
-      duur: end - start
-    };
-  });
+  return map;
 }
 
 // ===== RISICO =====
-function addRisk(p,t){
+function getRisico(t){
 
-  let risico=[];
-  let aandacht=[];
+  let r=[], k=[];
 
   if(t.includes("nicht parallel")){
-    risico.push("Geen parallel uitvoering mogelijk → langere doorlooptijd");
+    r.push("Geen parallel uitvoering mogelijk");
+    k.push("Fases blokkeren elkaar → vertraging");
   }
 
   if(t.includes("unterbrechung")){
-    risico.push("Onderbrekingen mogelijk tussen fases");
+    r.push("Onderbreking mogelijk");
+    k.push("Stilstand tussen fases");
   }
 
   if(t.includes("drittfirmen")){
-    risico.push("Afhankelijkheid van derden");
-    aandacht.push("Afstemming met nutsbedrijven vereist");
+    r.push("Afhankelijkheid derden");
+    k.push("Planning afhankelijk van nutsbedrijven");
   }
 
   if(t.includes("nicht vergütet")){
-    risico.push("Niet vergoede werkzaamheden");
+    r.push("Niet vergoede werkzaamheden");
+    k.push("Kosten liggen bij aannemer");
   }
 
-  return {risico,aandacht};
+  return {r,k};
 }
 
 // ===== GROTE SAMENVATTING =====
-function bigSummary(p,t){
+function bigSummary(t){
 
   return `
-  Deze fase (${p.name}) vormt een essentieel onderdeel binnen de gefaseerde uitvoering van het project. 
-  De werkzaamheden in deze fase zijn direct gekoppeld aan de voortgang van voorgaande fases en bepalen mede de totale projectdoorlooptijd.
+  Dit project betreft een gefaseerde uitvoering waarbij meerdere Planstraßen in volgorde worden gerealiseerd. 
+  De uitvoeringsstrategie is afhankelijk van een strakke fasering waarbij werkzaamheden niet gelijktijdig kunnen plaatsvinden.
 
-  De geplande uitvoeringsperiode loopt van ${formatDate(p.start)} tot ${formatDate(p.end)}, 
-  met een geschatte duur van ${p.duur} maanden.
+  Binnen het contract zijn bepalingen opgenomen die invloed hebben op zowel planning als financiële risico’s. 
+  Met name het ontbreken van parallelle uitvoering en mogelijke onderbrekingen zorgen voor een verhoogde druk op de doorlooptijd.
 
-  Binnen deze fase is sprake van ${p.risico.length > 0 ? "meerdere risico’s" : "beperkte risico’s"}, 
-  die invloed hebben op zowel planning als uitvoering. 
-  ${t.includes("nicht parallel") ? "Parallel werken is niet toegestaan, waardoor vertraging direct effect heeft op opvolgende fases." : ""}
+  Daarnaast is er sprake van afhankelijkheid van externe partijen, zoals nutsbedrijven, 
+  wat extra coördinatie vereist en een verhoogd risico op vertraging met zich meebrengt.
 
-  ${t.includes("drittfirmen") ? "Daarnaast is de uitvoering afhankelijk van derden, wat extra coördinatie en afstemming vereist." : ""}
+  Vanuit uitvoeringsperspectief vraagt dit project om een gedetailleerde voorbereiding, 
+  strakke planning en continue afstemming tussen alle betrokken partijen.
 
-  Conclusie: deze fase vraagt om een strakke voorbereiding, duidelijke planning en intensieve bewaking tijdens uitvoering.
+  Conclusie: het project is uitvoerbaar, maar kent duidelijke risico’s die actief gemanaged moeten worden 
+  om vertraging en extra kosten te voorkomen.
   `;
-}
-
-// ===== FORMAT =====
-function formatDate(v){
-  let y = Math.floor(v/12);
-  let m = v % 12;
-  return `${m}/${y}`;
-}
-
-// ===== KRITISCH =====
-function markCritical(phases){
-  return phases.map(p=>{
-    let score = p.risico.length + p.duur;
-    return {...p, kritisch: score > 8};
-  });
-}
-
-// ===== TIMELINE =====
-function buildTimeline(phases){
-
-  let min = Math.min(...phases.map(p=>p.start));
-  let max = Math.max(...phases.map(p=>p.end));
-  let total = max - min;
-
-  return `
-  <div class="section">
-    <h3>Planning</h3>
-
-    ${phases.map(p=>{
-      let left = ((p.start - min) / total) * 100;
-      let width = (p.duur / total) * 100;
-
-      return `
-      <div style="margin-bottom:10px;">
-        <b>${p.name}</b> ${p.kritisch ? '<span class="high">(Kritiek)</span>' : ''}
-
-        <div style="background:#ddd;height:20px;position:relative;">
-          <div style="
-            position:absolute;
-            left:${left}%;
-            width:${width}%;
-            height:100%;
-            background:${p.kritisch ? '#dc2626' : '#2563eb'};
-          "></div>
-        </div>
-      </div>
-      `;
-    }).join("")}
-
-  </div>
-  `;
-}
-
-// ===== PDF EXPORT =====
-function exportPDF(){
-
-  let w = window.open("");
-  w.document.write("<html><head><title>Rapport</title></head><body>");
-  w.document.write(out.innerHTML);
-  w.document.write("</body></html>");
-  w.document.close();
-  w.print();
 }
 
 // ===== MAIN =====
@@ -270,44 +164,41 @@ function analyse(){
   let t = lvText.value.toLowerCase();
   if(!t) return;
 
-  let phases = buildPhases(t);
-  phases = attachDates(phases,t);
-
-  phases = phases.map(p=>{
-    let r = addRisk(p,t);
-    return {...p, ...r};
-  });
-
-  phases = markCritical(phases);
+  let plans = detectPlanstrassen(t);
+  let mat = extractMaterials(t);
+  let risico = getRisico(t);
 
   out.innerHTML = `
 
-  ${buildTimeline(phases)}
+  <div class="section">
+    <h3>Projectanalyse</h3>
+    <p>${bigSummary(t)}</p>
+  </div>
 
   <div class="section">
-    <h3>Analyse per Planstraße</h3>
+    <h3>Planstraßen</h3>
+    ${plans.map(p=>`<div class="card"><b>${p}</b></div>`).join("")}
+  </div>
 
-    ${phases.map(p=>`
+  <div class="section">
+    <h3>Risico’s</h3>
+    <ul>${risico.r.map(x=>`<li class="high">${x}</li>`).join("")}</ul>
+
+    <h3>Knelpunten</h3>
+    <ul>${risico.k.map(x=>`<li class="mid">${x}</li>`).join("")}</ul>
+  </div>
+
+  <div class="section">
+    <h3>Bestellijst (indicatief)</h3>
+
+    ${Object.entries(mat).map(([k,v])=>`
       <div class="card">
-
-        <h3>${p.name}</h3>
-
-        <p>${bigSummary(p,t)}</p>
-
-        <b>Risico’s</b>
-        <ul>
-          ${p.risico.map(r=>`<li class="high">${r}</li>`).join("")}
-        </ul>
-
-        <b>Aandachtspunten</b>
-        <ul>
-          ${p.aandacht.map(a=>`<li class="mid">${a}</li>`).join("")}
-        </ul>
-
+        ${k} → ${v}x
       </div>
     `).join("")}
 
   </div>
+
   `;
 }
 
