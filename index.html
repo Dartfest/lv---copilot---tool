@@ -1,88 +1,132 @@
 <script>
 
-// ===== DATA UIT LV (HARDCODE OP BASIS VAN TEKST) =====
+// ===== CONTRACTUELE PLANNING UIT LV =====
 const fases = [
   {
-    name: "Bauabschnitt 1",
-    plan: "Planstraße C",
-    start: "06/2026",
-    end: "07/2027"
+    id:1,
+    name:"Bauabschnitt 1",
+    plan:"planstraße c",
+    start:"06/2026",
+    end:"07/2027",
+    afhankelijk:"start project"
   },
   {
-    name: "Bauabschnitt 2",
-    plan: "Planstraße E",
-    start: "na Bauabschnitt 1",
-    end: "07/2027"
+    id:2,
+    name:"Bauabschnitt 2",
+    plan:"planstraße e",
+    start:"na BA1",
+    end:"07/2027",
+    afhankelijk:"na Bauabschnitt 1"
   },
   {
-    name: "Bauabschnitt 3",
-    plan: "Planstraße D Teil 1",
-    start: "08/2027",
-    end: "05/2028"
+    id:3,
+    name:"Bauabschnitt 3",
+    plan:"planstraße d teil 1",
+    start:"08/2027",
+    end:"05/2028",
+    afhankelijk:"start fase 2 gereed"
   },
   {
-    name: "Bauabschnitt 4",
-    plan: "Planstraße D Teil 2",
-    start: "na Bauabschnitt 3",
-    end: "05/2028"
+    id:4,
+    name:"Bauabschnitt 4",
+    plan:"planstraße d teil 2",
+    start:"na BA3",
+    end:"05/2028",
+    afhankelijk:"na Bauabschnitt 3"
   }
 ];
 
-// ===== SAMENVATTING =====
-function summary(f){
+// ===== TEKST PER FASE =====
+function getPhaseText(text, fase){
+  let idx = text.indexOf(fase.plan);
+  if(idx === -1) return "";
+  return text.substring(idx, idx + 2000);
+}
 
-  return `
-  <p>
-  ${f.name} (${f.plan}) vormt een contractueel vastgelegde fase binnen het project en is onderdeel van een strikt gefaseerde uitvoering.
-  </p>
+// ===== WERKZAAMHEDEN =====
+function extractWork(text){
 
-  <p>
-  De werkzaamheden bestaan uit het volledig realiseren van het tracé, inclusief:
-  rioleringswerkzaamheden, nutsvoorzieningen en tijdelijke infrastructuur (baustraßen).
-  </p>
+  let lines = text.split(".");
 
-  <p>
-  De uitvoering moet zonder onderbreking plaatsvinden, wat betekent dat capaciteit, logistiek en materiaalvoorziening continu beschikbaar moeten zijn.
-  </p>
-
-  <p>
-  Aangezien parallel werken expliciet is uitgesloten, ontstaat een volledig lineaire planning waarbij elke vertraging direct invloed heeft op het gehele project.
-  </p>
-
-  <p class="high">
-  Conclusie: deze fase is kritisch en vereist continue uitvoering, strakke planning en volledige beschikbaarheid van resources.
-  </p>
-  `;
+  return lines
+    .filter(l =>
+      l.includes("kanal") ||
+      l.includes("verlegen") ||
+      l.includes("herstellen") ||
+      l.includes("erschließ") ||
+      l.includes("versorgung") ||
+      l.includes("baustra")
+    )
+    .slice(0,6)
+    .map(l => `<li>${l.trim()}</li>`)
+    .join("");
 }
 
 // ===== RISICO =====
-function risico(){
+function risico(f){
 
   return `
   <ul>
-    <li class="high">Geen parallel uitvoering toegestaan → volledige afhankelijkheid</li>
-    <li class="high">Strikte einddata (contractueel) → boeterisico</li>
-    <li class="high">Continuïteitseis → geen stilstand toegestaan</li>
+    <li class="high">Strikte einddatum (${f.end}) contractueel vastgelegd</li>
+    <li class="high">Geen parallel uitvoering toegestaan → volledig kritieke keten</li>
+    <li class="high">Directe afhankelijkheid van voorgaande fase (${f.afhankelijk})</li>
+    <li class="mid">Continuïteit vereist (geen onderbreking toegestaan)</li>
     <li class="mid">Afstemming nutsbedrijven noodzakelijk</li>
-    <li class="mid">Logistieke beperkingen binnen werkgebied</li>
   </ul>
   `;
 }
 
-// ===== GANTT =====
-function buildGantt(){
+// ===== STERKE SAMENVATTING =====
+function summary(f){
+
+  return `
+  <p>
+  ${f.name} (${f.plan.toUpperCase()}) betreft een volledig gedefinieerde uitvoeringsfase binnen het project,
+  waarbij alle civiele werkzaamheden integraal worden uitgevoerd.
+  </p>
+
+  <p>
+  De werkzaamheden omvatten de volledige aanleg van riolering, nutsvoorzieningen en tijdelijke infrastructuur.
+  Deze werkzaamheden moeten zonder onderbreking worden uitgevoerd, wat betekent dat planning, personeel en materiaal
+  continu beschikbaar moeten zijn.
+  </p>
+
+  <p>
+  De fase is direct afhankelijk van de voorgaande fase (${f.afhankelijk}), waardoor een lineaire uitvoeringsstructuur ontstaat.
+  Dit betekent dat vertraging in één fase direct doorwerkt in de rest van het project.
+  </p>
+
+  <p>
+  Aangezien parallel werken expliciet is uitgesloten in het contract, ontstaat een volledig kritieke planning zonder buffer.
+  Hierdoor is het project zeer gevoelig voor verstoringen.
+  </p>
+
+  <p class="high">
+  Conclusie: ${f.name} ligt op het kritieke pad en vereist continue uitvoering, strakke regie en actieve risicobeheersing.
+  </p>
+  `;
+}
+
+// ===== KRITIEKE PAD BLOK =====
+function criticalPath(){
 
   return `
   <div class="section">
-    <h2>Planning (contractueel)</h2>
+    <h2>Kritieke Pad Analyse</h2>
 
-    <div><b>Bauabschnitt 1</b>: 06/2026 → 07/2027</div>
-    <div><b>Bauabschnitt 2</b>: direct aansluitend → 07/2027</div>
-    <div><b>Bauabschnitt 3</b>: 08/2027 → start</div>
-    <div><b>Bauabschnitt 4</b>: direct aansluitend → 05/2028</div>
+    <p>
+    Alle Bauabschnitte worden sequentieel uitgevoerd zonder mogelijkheid tot parallel werken.
+    Dit betekent dat de volledige planning één doorlopende kritieke keten vormt.
+    </p>
+
+    <p>
+    Kritieke volgorde:
+    <br>BA1 → BA2 → BA3 → BA4
+    </p>
 
     <p class="high">
-    Kritieke pad: alle fasen (geen parallelle uitvoering mogelijk)
+    Vertraging in één fase leidt direct tot vertraging van het gehele project.
+    Er is geen tijdsbuffer aanwezig.
     </p>
   </div>
   `;
@@ -91,34 +135,37 @@ function buildGantt(){
 // ===== MAIN =====
 function analyse(){
 
+  let text = lvText.value.toLowerCase();
+
   out.innerHTML = `
-  
-  ${buildGantt()}
 
-  ${fases.map(f=>`
+    ${criticalPath()}
 
-    <div class="section">
+    ${fases.map(f=>{
 
-      <h2>${f.name} – ${f.plan}</h2>
+      let t = getPhaseText(text, f);
+      let work = extractWork(t);
 
-      <h3>Periode</h3>
-      <p><b>${f.start} → ${f.end}</b></p>
+      return `
+      <div class="section">
 
-      ${summary(f)}
+        <h2>${f.name} – ${f.plan.toUpperCase()}</h2>
 
-      <h3>Werkzaamheden</h3>
-      <ul>
-        <li>Kanaalbouw (riolering)</li>
-        <li>Nutsvoorzieningen (water / elektra / telecom)</li>
-        <li>Aanleg bouwwegen (Baustraßen)</li>
-      </ul>
+        <h3>Periode (contractueel)</h3>
+        <p><b>${f.start} → ${f.end}</b></p>
 
-      <h3>Risico’s</h3>
-      ${risico()}
+        ${summary(f)}
 
-    </div>
+        <h3>Werkzaamheden</h3>
+        <ul>${work || "<li>Complete civiele uitvoering (riolering, nuts, bouwwegen)</li>"}</ul>
 
-  `).join("")}
+        <h3>Risico’s</h3>
+        ${risico(f)}
+
+      </div>
+      `;
+
+    }).join("")}
 
   `;
 }
