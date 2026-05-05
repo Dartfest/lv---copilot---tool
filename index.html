@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Executive Planning</title>
+<title>LV Intelligence – Executive Report</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -17,9 +17,10 @@ button {
   color:#fff;
   border:none;
   cursor:pointer;
+  margin-right:5px;
 }
 
-.card { background:#fff; padding:12px; border-radius:6px; margin-bottom:10px; }
+.card { background:#fff; padding:15px; border-radius:6px; margin-bottom:12px; }
 
 .high { color:#dc2626; }
 .mid { color:#f59e0b; }
@@ -35,7 +36,7 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Planning Dashboard</div>
+<div class="header">LV Intelligence – Directie Dashboard</div>
 
 <div class="container">
 
@@ -44,6 +45,7 @@ button {
 <textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
 
 <button onclick="analyse()">Analyse</button>
+<button onclick="exportPDF()">Export PDF</button>
 
 <div id="out"></div>
 
@@ -51,7 +53,7 @@ button {
 
 <script>
 
-// ===== PDF =====
+// ===== PDF INLEZEN =====
 function loadScript(url){
   return new Promise(res=>{
     let s=document.createElement("script");
@@ -119,7 +121,7 @@ function detectTeil(t, plan){
   return match.map((x,i)=>`${plan} - TEIL ${i+1}`);
 }
 
-// ===== FASE BOUW =====
+// ===== FASES =====
 function buildPhases(t){
 
   let plans = detectPlanstrassen(t);
@@ -127,7 +129,6 @@ function buildPhases(t){
 
   plans.forEach(p=>{
     let delen = detectTeil(t,p);
-
     delen.forEach(d=>{
       phases.push({ name:d });
     });
@@ -136,7 +137,7 @@ function buildPhases(t){
   return phases;
 }
 
-// ===== DATUM KOPPELING =====
+// ===== DATUM =====
 function attachDates(phases,t){
 
   let dates = extractDates(t);
@@ -162,15 +163,15 @@ function addRisk(p,t){
   let aandacht=[];
 
   if(t.includes("nicht parallel")){
-    risico.push("Gefaseerde uitvoering zonder overlap");
+    risico.push("Geen parallel uitvoering mogelijk → langere doorlooptijd");
   }
 
   if(t.includes("unterbrechung")){
-    risico.push("Onderbreking tussen fases mogelijk");
+    risico.push("Onderbrekingen mogelijk tussen fases");
   }
 
   if(t.includes("drittfirmen")){
-    risico.push("Afhankelijkheid derden");
+    risico.push("Afhankelijkheid van derden");
     aandacht.push("Afstemming met nutsbedrijven vereist");
   }
 
@@ -181,30 +182,31 @@ function addRisk(p,t){
   return {risico,aandacht};
 }
 
-// ===== SAMENVATTING =====
-function buildSummary(p,t){
+// ===== GROTE SAMENVATTING =====
+function bigSummary(p,t){
 
-  let txt=[];
+  return `
+  Deze fase (${p.name}) vormt een essentieel onderdeel binnen de gefaseerde uitvoering van het project. 
+  De werkzaamheden in deze fase zijn direct gekoppeld aan de voortgang van voorgaande fases en bepalen mede de totale projectdoorlooptijd.
 
-  txt.push("Deze fase maakt onderdeel uit van de gefaseerde projectuitvoering.");
+  De geplande uitvoeringsperiode loopt van ${formatDate(p.start)} tot ${formatDate(p.end)}, 
+  met een geschatte duur van ${p.duur} maanden.
 
-  txt.push("De voortgang is direct afhankelijk van de afronding van voorgaande fases.");
+  Binnen deze fase is sprake van ${p.risico.length > 0 ? "meerdere risico’s" : "beperkte risico’s"}, 
+  die invloed hebben op zowel planning als uitvoering. 
+  ${t.includes("nicht parallel") ? "Parallel werken is niet toegestaan, waardoor vertraging direct effect heeft op opvolgende fases." : ""}
 
-  if(t.includes("nicht parallel")){
-    txt.push("Parallel werken is uitgesloten, waardoor deze fase kritisch is voor de totale doorlooptijd.");
-  }
+  ${t.includes("drittfirmen") ? "Daarnaast is de uitvoering afhankelijk van derden, wat extra coördinatie en afstemming vereist." : ""}
 
-  if(p.risico.length){
-    txt.push("Binnen deze fase zijn meerdere risico’s aanwezig die planning en uitvoering beïnvloeden.");
-  }
+  Conclusie: deze fase vraagt om een strakke voorbereiding, duidelijke planning en intensieve bewaking tijdens uitvoering.
+  `;
+}
 
-  if(t.includes("drittfirmen")){
-    txt.push("Afstemming met derden is essentieel om vertraging te voorkomen.");
-  }
-
-  txt.push("Goede voorbereiding en strakke coördinatie zijn noodzakelijk voor succesvolle uitvoering.");
-
-  return txt;
+// ===== FORMAT =====
+function formatDate(v){
+  let y = Math.floor(v/12);
+  let m = v % 12;
+  return `${m}/${y}`;
 }
 
 // ===== KRITISCH =====
@@ -213,13 +215,6 @@ function markCritical(phases){
     let score = p.risico.length + p.duur;
     return {...p, kritisch: score > 8};
   });
-}
-
-// ===== DATUM FORMAT =====
-function formatDate(v){
-  let y = Math.floor(v/12);
-  let m = v % 12;
-  return `${m}/${y}`;
 }
 
 // ===== TIMELINE =====
@@ -231,38 +226,42 @@ function buildTimeline(phases){
 
   return `
   <div class="section">
-    <h3>Planning (Tijdlijn)</h3>
+    <h3>Planning</h3>
 
     ${phases.map(p=>{
-
       let left = ((p.start - min) / total) * 100;
       let width = (p.duur / total) * 100;
 
       return `
       <div style="margin-bottom:10px;">
+        <b>${p.name}</b> ${p.kritisch ? '<span class="high">(Kritiek)</span>' : ''}
 
-        <b>${p.name}</b>
-        ${p.kritisch ? '<span class="high"> (Kritiek)</span>' : ''}
-
-        <div style="position:relative; background:#ddd; height:20px; border-radius:4px;">
-
+        <div style="background:#ddd;height:20px;position:relative;">
           <div style="
             position:absolute;
             left:${left}%;
             width:${width}%;
             height:100%;
             background:${p.kritisch ? '#dc2626' : '#2563eb'};
-            border-radius:4px;
           "></div>
-
         </div>
-
       </div>
       `;
     }).join("")}
 
   </div>
   `;
+}
+
+// ===== PDF EXPORT =====
+function exportPDF(){
+
+  let w = window.open("");
+  w.document.write("<html><head><title>Rapport</title></head><body>");
+  w.document.write(out.innerHTML);
+  w.document.write("</body></html>");
+  w.document.close();
+  w.print();
 }
 
 // ===== MAIN =====
@@ -286,21 +285,14 @@ function analyse(){
   ${buildTimeline(phases)}
 
   <div class="section">
-    <h3>Fase Analyse</h3>
+    <h3>Analyse per Planstraße</h3>
 
     ${phases.map(p=>`
       <div class="card">
 
-        <b>${p.name}</b><br>
-        Periode: ${formatDate(p.start)} → ${formatDate(p.end)}<br>
-        Duur: ${p.duur} mnd
+        <h3>${p.name}</h3>
 
-        <br><br>
-
-        <b>Samenvatting</b>
-        <ul>
-          ${buildSummary(p,t).map(x=>`<li>${x}</li>`).join("")}
-        </ul>
+        <p>${bigSummary(p,t)}</p>
 
         <b>Risico’s</b>
         <ul>
