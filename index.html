@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Pro Phase Engine</title>
+<title>LV Intelligence – Executive Planning</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#eef2f7; }
@@ -35,7 +35,7 @@ button {
 
 <body>
 
-<div class="header">LV Intelligence – Pro Phase Engine</div>
+<div class="header">LV Intelligence – Planning Dashboard</div>
 
 <div class="container">
 
@@ -102,25 +102,21 @@ function extractDates(t){
   return r;
 }
 
-// ===== STRAKKE FASE DETECTIE =====
+// ===== PLANSTRASSE =====
 function detectPlanstrassen(t){
-
   let matches = t.match(/planstraße\s*[a-z]/gi) || [];
-
-  // uniek maken
   let unique = [...new Set(matches.map(m=>m.toLowerCase()))];
-
   return unique.map(p=>p.toUpperCase());
 }
 
-// ===== TEIL DETECTIE =====
+// ===== TEIL =====
 function detectTeil(t, plan){
+  let regex = new RegExp(plan.toLowerCase() + ".*?teil\\s*\\d","gi");
+  let match = t.match(regex);
 
-  let teil = t.match(new RegExp(plan.toLowerCase() + ".*?teil\\s*\\d","gi"));
+  if(!match) return [plan];
 
-  if(!teil) return [plan];
-
-  return teil.map((x,i)=>`${plan} - TEIL ${i+1}`);
+  return match.map((x,i)=>`${plan} - TEIL ${i+1}`);
 }
 
 // ===== FASE BOUW =====
@@ -166,62 +162,107 @@ function addRisk(p,t){
   let aandacht=[];
 
   if(t.includes("nicht parallel")){
-    risico.push("Gefaseerde uitvoering zonder overlap → langere doorlooptijd");
+    risico.push("Gefaseerde uitvoering zonder overlap");
   }
 
   if(t.includes("unterbrechung")){
-    risico.push("Mogelijke onderbrekingen tussen fases zonder vergoeding");
+    risico.push("Onderbreking tussen fases mogelijk");
   }
 
   if(t.includes("drittfirmen")){
-    risico.push("Afhankelijkheid van nutsbedrijven / derden");
-    aandacht.push("Strakke coördinatie noodzakelijk met externe partijen");
+    risico.push("Afhankelijkheid derden");
+    aandacht.push("Afstemming met nutsbedrijven vereist");
   }
 
   if(t.includes("nicht vergütet")){
-    risico.push("Werkzaamheden niet afzonderlijk vergoed → financieel risico");
+    risico.push("Niet vergoede werkzaamheden");
   }
 
   return {risico,aandacht};
 }
 
-// ===== PRO SAMENVATTING =====
+// ===== SAMENVATTING =====
 function buildSummary(p,t){
 
   let txt=[];
 
-  txt.push("Deze fase vormt een onderdeel van de gefaseerde uitvoering binnen het project.");
+  txt.push("Deze fase maakt onderdeel uit van de gefaseerde projectuitvoering.");
 
-  txt.push("De werkzaamheden zijn gekoppeld aan de voortgang van voorgaande fases en moeten in logische volgorde worden uitgevoerd.");
+  txt.push("De voortgang is direct afhankelijk van de afronding van voorgaande fases.");
 
   if(t.includes("nicht parallel")){
-    txt.push("Parallelle uitvoering is contractueel uitgesloten, waardoor deze fase direct invloed heeft op de totale projectduur.");
+    txt.push("Parallel werken is uitgesloten, waardoor deze fase kritisch is voor de totale doorlooptijd.");
+  }
+
+  if(p.risico.length){
+    txt.push("Binnen deze fase zijn meerdere risico’s aanwezig die planning en uitvoering beïnvloeden.");
   }
 
   if(t.includes("drittfirmen")){
-    txt.push("De uitvoering is afhankelijk van derden, wat extra afstemming en risico op vertraging met zich meebrengt.");
+    txt.push("Afstemming met derden is essentieel om vertraging te voorkomen.");
   }
 
-  if(t.includes("nicht vergütet")){
-    txt.push("Binnen deze fase kunnen werkzaamheden vallen die niet afzonderlijk worden vergoed.");
-  }
-
-  txt.push("Succesvolle uitvoering vereist strakke planning, voorbereiding en coördinatie.");
+  txt.push("Goede voorbereiding en strakke coördinatie zijn noodzakelijk voor succesvolle uitvoering.");
 
   return txt;
 }
 
-// ===== SCORE =====
-function calcScore(phases){
+// ===== KRITISCH =====
+function markCritical(phases){
+  return phases.map(p=>{
+    let score = p.risico.length + p.duur;
+    return {...p, kritisch: score > 8};
+  });
+}
 
-  let risico = phases.reduce((a,p)=>a+p.risico.length,0);
-  let roi = 100 - (risico * 5);
+// ===== DATUM FORMAT =====
+function formatDate(v){
+  let y = Math.floor(v/12);
+  let m = v % 12;
+  return `${m}/${y}`;
+}
 
-  let advies="GO", cls="good";
-  if(roi<50){advies="NO-GO";cls="high";}
-  else if(roi<70){advies="GO MET RISICO";cls="mid";}
+// ===== TIMELINE =====
+function buildTimeline(phases){
 
-  return {risico,roi,advies,cls};
+  let min = Math.min(...phases.map(p=>p.start));
+  let max = Math.max(...phases.map(p=>p.end));
+  let total = max - min;
+
+  return `
+  <div class="section">
+    <h3>Planning (Tijdlijn)</h3>
+
+    ${phases.map(p=>{
+
+      let left = ((p.start - min) / total) * 100;
+      let width = (p.duur / total) * 100;
+
+      return `
+      <div style="margin-bottom:10px;">
+
+        <b>${p.name}</b>
+        ${p.kritisch ? '<span class="high"> (Kritiek)</span>' : ''}
+
+        <div style="position:relative; background:#ddd; height:20px; border-radius:4px;">
+
+          <div style="
+            position:absolute;
+            left:${left}%;
+            width:${width}%;
+            height:100%;
+            background:${p.kritisch ? '#dc2626' : '#2563eb'};
+            border-radius:4px;
+          "></div>
+
+        </div>
+
+      </div>
+      `;
+    }).join("")}
+
+  </div>
+  `;
 }
 
 // ===== MAIN =====
@@ -238,24 +279,20 @@ function analyse(){
     return {...p, ...r};
   });
 
-  let score = calcScore(phases);
+  phases = markCritical(phases);
 
   out.innerHTML = `
 
-  <div class="card">
-    Risico: <span class="high">${score.risico}</span><br>
-    ROI: ${score.roi}%<br>
-    Advies: <span class="${score.cls}">${score.advies}</span>
-  </div>
+  ${buildTimeline(phases)}
 
   <div class="section">
-    <h3>Fase Analyse (Planstraße)</h3>
+    <h3>Fase Analyse</h3>
 
     ${phases.map(p=>`
       <div class="card">
 
         <b>${p.name}</b><br>
-        Periode: ${p.start} → ${p.end}<br>
+        Periode: ${formatDate(p.start)} → ${formatDate(p.end)}<br>
         Duur: ${p.duur} mnd
 
         <br><br>
@@ -279,7 +316,6 @@ function analyse(){
     `).join("")}
 
   </div>
-
   `;
 }
 
