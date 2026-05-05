@@ -84,85 +84,99 @@ pdfFile.onchange=e=>{
   if(e.target.files[0]) handlePDF(e.target.files[0]);
 };
 
-// ===== JOUW STRUCTUUR =====
+// ===== STRUCTUUR =====
 const fases = [
-  {id:1, name:"Bauabschnitt 1", plan:"Planstraße C"},
-  {id:2, name:"Bauabschnitt 2", plan:"Planstraße E"},
-  {id:3, name:"Bauabschnitt 3", plan:"Planstraße D Teil 1"},
-  {id:4, name:"Bauabschnitt 4", plan:"Planstraße D Teil 2"}
+  {id:1, name:"Bauabschnitt 1", plan:"planstraße c"},
+  {id:2, name:"Bauabschnitt 2", plan:"planstraße e"},
+  {id:3, name:"Bauabschnitt 3", plan:"planstraße d teil 1"},
+  {id:4, name:"Bauabschnitt 4", plan:"planstraße d teil 2"}
 ];
 
-// ===== FILTER TEKST PER FASE =====
-function getPhaseText(text, fase){
+// ===== PLANNING =====
+function buildPlanning(){
 
-  let start = text.indexOf(fase.plan.toLowerCase());
-  if(start === -1) return "";
+  let startYear = 2025;
+  let startMonth = 1;
 
-  return text.substring(start, start + 1500); // context
+  return fases.map((f,i)=>{
+
+    let start = startMonth + (i*6);
+    let end = start + 5;
+
+    let sY = startYear + Math.floor((start-1)/12);
+    let sM = ((start-1)%12)+1;
+
+    let eY = startYear + Math.floor((end-1)/12);
+    let eM = ((end-1)%12)+1;
+
+    return {
+      ...f,
+      periode: `${sM}/${sY} → ${eM}/${eY}`
+    };
+  });
 }
 
-// ===== BESTELLIJST =====
-function extractMaterials(text){
+// ===== TEKST PER FASE =====
+function getPhaseText(text, fase){
 
-  let results = {};
+  let idx = text.indexOf(fase.plan);
+  if(idx === -1) return "";
 
-  let regex = /(\d+)\s*(m2|m¹|m)?[^a-zA-Z0-9]*(dn\s*\d+)[^a-zA-Z0-9]*(stahl|pvc|pe)?/gi;
+  return text.substring(idx, idx + 2000);
+}
 
-  let m;
-  while((m = regex.exec(text))){
+// ===== WERKZAAMHEDEN =====
+function extractWork(text){
 
-    let hoeveelheid = m[1];
-    let unit = m[2] || "st";
-    let dn = m[3].toUpperCase();
-    let mat = (m[4] || "onbekend");
-
-    let key = `${dn} ${mat}`;
-
-    results[key] = results[key] || {qty:0, unit};
-    results[key].qty += parseInt(hoeveelheid);
-  }
-
-  return results;
+  let lines = text.split(".");
+  
+  return lines
+    .filter(l => 
+      l.includes("bau") || 
+      l.includes("verlegen") || 
+      l.includes("herstellen") || 
+      l.includes("einbau") ||
+      l.includes("anschluss")
+    )
+    .slice(0,6)
+    .map(l => `<li>${l.trim()}</li>`)
+    .join("");
 }
 
 // ===== RISICO =====
-function risico(text){
+function risico(){
 
   return `
   <ul>
-    <li class="high">Planning: fasering dwingt sequentiële uitvoering → geen buffer</li>
-    <li class="high">Uitvoering: afhankelijkheid derden (nutsbedrijven)</li>
-    <li class="mid">Contract: mogelijk niet vergoede werkzaamheden</li>
-    <li class="mid">Technisch: kans op onderbrekingen en afstemming issues</li>
+    <li class="high">Volledig sequentiële uitvoering → geen buffer in planning</li>
+    <li class="high">Afhankelijkheid derden (nutsbedrijven / vergunningen)</li>
+    <li class="mid">Logistieke beperkingen binnen werkgebied</li>
+    <li class="mid">Contractuele risico’s (niet-vergoede werkzaamheden)</li>
   </ul>
   `;
 }
 
-// ===== GROTE SAMENVATTING =====
+// ===== SAMENVATTING =====
 function summary(f){
 
   return `
   <p>
-  ${f.name} (${f.plan}) vormt een cruciale fase binnen het project en bepaalt direct de voortgang van de totale uitvoering.
-  Binnen deze fase worden werkzaamheden uitgevoerd die niet los gezien kunnen worden van voorgaande en opvolgende fases.
+  ${f.name} (${f.plan}) vormt een essentiële fase binnen het project en bepaalt direct de voortgang van de uitvoering.
+  Binnen deze fase worden werkzaamheden uitgevoerd die sterk afhankelijk zijn van voorgaande fases.
   </p>
 
   <p>
-  De uitvoering is volledig afhankelijk van een gefaseerde aanpak, waarbij werkzaamheden in volgorde moeten plaatsvinden.
-  Hierdoor ontstaat een kritieke keten zonder flexibiliteit, wat betekent dat elke vertraging directe impact heeft op de totale planning.
+  De uitvoering is gefaseerd en laat geen parallelle werkzaamheden toe, waardoor een kritieke keten ontstaat zonder speling.
+  Eventuele vertraging leidt direct tot projectvertraging.
   </p>
 
   <p>
-  Binnen deze fase spelen logistiek, bereikbaarheid en coördinatie met derden een belangrijke rol.
-  Werkzaamheden moeten nauwkeurig worden afgestemd met externe partijen zoals nutsbedrijven.
-  </p>
-
-  <p>
-  Contractueel gezien kunnen beperkingen zoals niet-parallel werken en mogelijke niet-vergoede werkzaamheden leiden tot financiële risico’s.
+  Logistiek, bereikbaarheid en afstemming met derden spelen een cruciale rol in deze fase.
+  Daarnaast brengen contractuele voorwaarden extra risico’s met zich mee.
   </p>
 
   <p class="high">
-  Conclusie: deze fase is kritisch en vereist strakke voorbereiding, continue monitoring en actieve sturing.
+  Conclusie: deze fase is kritisch voor planning, uitvoering en kostenbeheersing.
   </p>
   `;
 }
@@ -171,27 +185,28 @@ function summary(f){
 function analyse(){
 
   let text = lvText.value.toLowerCase();
+  let planning = buildPlanning();
 
-  out.innerHTML = fases.map(f=>{
+  out.innerHTML = planning.map(f=>{
 
     let t = getPhaseText(text, f);
-    let mat = extractMaterials(t);
+    let work = extractWork(t);
 
     return `
     <div class="section">
 
-      <h2>${f.name} – ${f.plan}</h2>
+      <h2>${f.name} – ${f.plan.toUpperCase()}</h2>
+
+      <h3>Periode</h3>
+      <p><b>${f.periode}</b></p>
 
       ${summary(f)}
 
+      <h3>Werkzaamheden</h3>
+      <ul>${work || "<li>Geen specifieke werkzaamheden gedetecteerd</li>"}</ul>
+
       <h3>Risico’s</h3>
-      ${risico(t)}
-
-      <h3>Bestellijst</h3>
-
-      ${Object.entries(mat).map(([k,v])=>`
-        <div class="card">${k} → ${v.qty} ${v.unit}</div>
-      `).join("") || "Geen materiaal gedetecteerd"}
+      ${risico()}
 
     </div>
     `;
