@@ -2,8 +2,8 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>Machine-uren Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Machine Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -16,15 +16,28 @@
       padding: 20px;
     }
 
-    h1 {
+    h1,h2 {
       text-align: center;
+    }
+
+    .filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      justify-content: center;
+    }
+
+    select, input {
+      padding: 6px 10px;
+      font-size: 14px;
     }
 
     .dashboard {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
       gap: 20px;
-      margin-top: 30px;
+      margin-bottom: 30px;
     }
 
     .card {
@@ -34,13 +47,34 @@
       box-shadow: 0 0 10px rgba(0,0,0,.1);
     }
 
-    canvas {
-      max-height: 350px;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px 8px;
+      text-align: left;
+    }
+
+    th {
+      background: #e9ecef;
+      position: sticky;
+      top: 0;
+    }
+
+    .table-wrapper {
+      max-height: 400px;
+      overflow-y: auto;
+      background: white;
+      border-radius: 8px;
     }
 
     footer {
       text-align: center;
-      margin-top: 40px;
+      margin-top: 30px;
       color: #666;
       font-size: 14px;
     }
@@ -49,98 +83,130 @@
 
 <body>
 
-<h1>📊 Machine-uren Dashboard</h1>
+<h1>📊 Machine & Uren Dashboard</h1>
+
+<div class="filters">
+  <select id="filterKW"><option value="">Alle weken</option></select>
+  <select id="filterKP"><option value="">Alle kostenplaatsen</option></select>
+  <select id="filterGA"><option value="">Alle Geräteart</option></select>
+  <input id="search" placeholder="Zoeken…" />
+</div>
 
 <div class="dashboard">
-
   <div class="card">
     <h2>Uren per kostenplaats</h2>
-    <canvas id="kostenplaatsChart"></canvas>
+    <canvas id="kpChart"></canvas>
   </div>
-
   <div class="card">
     <h2>Uren per Geräteart</h2>
-    <canvas id="geraeteartChart"></canvas>
+    <canvas id="gaChart"></canvas>
   </div>
+</div>
 
-  <div class="card">
-    <h2>Uren & kosten per kalenderweek</h2>
-    <canvas id="weekChart"></canvas>
+<div class="card">
+  <h2>📋 Volledige Excel‑data</h2>
+  <div class="table-wrapper">
+    <table id="dataTable">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
   </div>
-
 </div>
 
 <footer>
-  Automatisch gegenereerd via GitHub Actions
+  Automatisch bijgewerkt via GitHub Actions
 </footer>
 
 <script>
-fetch('output/dashboard_data.json')
-  .then(response => response.json())
-  .then(data => {
+let brondata = [];
+let tableHead = document.querySelector("#dataTable thead");
+let tableBody = document.querySelector("#dataTable tbody");
 
-    /* ===== Uren per Kostenplaats ===== */
-    new Chart(document.getElementById('kostenplaatsChart'), {
-      type: 'bar',
-      data: {
-        labels: data.uren_per_kostenplaats.map(d => d.Kostenplaats),
-        datasets: [{
-          label: 'Uren',
-          data: data.uren_per_kostenplaats.map(d => d.Tijd),
-          backgroundColor: '#4e79a7'
-        }]
-      }
-    });
+fetch("output/dashboard_data.json")
+.then(r => r.json())
+.then(data => {
+  brondata = data.brondata;
+  initFilters(brondata);
+  renderTable(brondata);
+  renderCharts(brondata);
+});
 
-    /* ===== Uren per Geräteart ===== */
-    new Chart(document.getElementById('geraeteartChart'), {
-      type: 'bar',
-      data: {
-        labels: data.uren_per_geraeteart.map(d => d.Geräteart),
-        datasets: [{
-          label: 'Uren',
-          data: data.uren_per_geraeteart.map(d => d.Tijd),
-          backgroundColor: '#59a14f'
-        }]
-      }
-    });
+function initFilters(data) {
+  fillSelect("filterKW", [...new Set(data.map(d => d.Kalenderweek))]);
+  fillSelect("filterKP", [...new Set(data.map(d => d.Kostenplaats))]);
+  fillSelect("filterGA", [...new Set(data.map(d => d.Geräteart))]);
+}
 
-    /* ===== Uren & Kosten per Week ===== */
-    new Chart(document.getElementById('weekChart'), {
-      type: 'line',
-      data: {
-        labels: data.per_kalenderweek.map(d => d.Kalenderweek),
-        datasets: [
-          {
-            label: 'Uren',
-            data: data.per_kalenderweek.map(d => d.Tijd),
-            borderColor: '#e15759',
-            yAxisID: 'y'
-          },
-          {
-            label: 'Kosten',
-            data: data.per_kalenderweek.map(d => d.Kosten),
-            borderColor: '#76b7b2',
-            yAxisID: 'y1'
-          }
-        ]
-      },
-      options: {
-        scales: {
-          y: {
-            position: 'left',
-            title: { display: true, text: 'Uren' }
-          },
-          y1: {
-            position: 'right',
-            title: { display: true, text: 'Kosten (€)' },
-            grid: { drawOnChartArea: false }
-          }
-        }
-      }
-    });
-
+function fillSelect(id, values) {
+  const sel = document.getElementById(id);
+  values.filter(v => v).sort().forEach(v => {
+    sel.innerHTML += `<option value="${v}">${v}</option>`;
   });
+  sel.onchange = applyFilters;
+}
+
+document.getElementById("search").oninput = applyFilters;
+
+function applyFilters() {
+  const kw = filterKW.value;
+  const kp = filterKP.value;
+  const ga = filterGA.value;
+  const q  = search.value.toLowerCase();
+
+  const filtered = brondata.filter(r =>
+    (!kw || r.Kalenderweek === kw) &&
+    (!kp || r.Kostenplaats === kp) &&
+    (!ga || r.Geräteart === ga) &&
+    (Object.values(r).join(" ").toLowerCase().includes(q))
+  );
+
+  renderTable(filtered);
+  renderCharts(filtered);
+}
+
+function renderTable(rows) {
+  if (!rows.length) return;
+
+  tableHead.innerHTML = "<tr>" +
+    Object.keys(rows[0]).map(h => `<th>${h}</th>`).join("") +
+    "</tr>";
+
+  tableBody.innerHTML = rows.map(r =>
+    "<tr>" + Object.values(r).map(v => `<td>${v}</td>`).join("") + "</tr>"
+  ).join("");
+}
+
+let kpChart, gaChart;
+
+function renderCharts(data) {
+  if (kpChart) kpChart.destroy();
+  if (gaChart) gaChart.destroy();
+
+  const sum = (arr, key, val) =>
+    Object.entries(arr.reduce((a, c) => {
+      a[c[key]] = (a[c[key]] || 0) + c[val];
+      return a;
+    }, {}));
+
+  const kp = sum(data, "Kostenplaats", "Tijd");
+  const ga = sum(data, "Geräteart", "Tijd");
+
+  kpChart = new Chart(kpChartElem = document.getElementById("kpChart"), {
+    type: "bar",
+    data: {
+      labels: kp.map(x => x[0]),
+      datasets: [{ label: "Uren", data: kp.map(x => x[1]) }]
+    }
+  });
+
+  gaChart = new Chart(gaChartElem = document.getElementById("gaChart"), {
+    type: "bar",
+    data: {
+      labels: ga.map(x => x[0]),
+      datasets: [{ label: "Uren", data: ga.map(x => x[1]) }]
+    }
+  });
+}
 </script>
 
 </body>
