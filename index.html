@@ -2,8 +2,11 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>Machine Dashboard</title>
+  <title>Excel Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- SheetJS (Excel lezen) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -12,20 +15,25 @@
     body {
       font-family: Arial, sans-serif;
       background: #f4f6f8;
-      margin: 0;
       padding: 20px;
+      margin: 0;
     }
 
-    h1,h2 {
+    h1, h2 {
       text-align: center;
+    }
+
+    .upload {
+      text-align: center;
+      margin-bottom: 20px;
     }
 
     .filters {
       display: flex;
       gap: 10px;
+      justify-content: center;
       flex-wrap: wrap;
       margin-bottom: 20px;
-      justify-content: center;
     }
 
     select, input {
@@ -56,7 +64,6 @@
     th, td {
       border: 1px solid #ccc;
       padding: 6px 8px;
-      text-align: left;
     }
 
     th {
@@ -68,28 +75,22 @@
     .table-wrapper {
       max-height: 400px;
       overflow-y: auto;
-      background: white;
-      border-radius: 8px;
-    }
-
-    footer {
-      text-align: center;
-      margin-top: 30px;
-      color: #666;
-      font-size: 14px;
     }
   </style>
 </head>
-
 <body>
 
-<h1>📊 Machine & Uren Dashboard</h1>
+<h1>📊 Excel Dashboard</h1>
+
+<div class="upload">
+  <input type="file" id="upload" accept=".xlsx,.xls">
+</div>
 
 <div class="filters">
   <select id="filterKW"><option value="">Alle weken</option></select>
   <select id="filterKP"><option value="">Alle kostenplaatsen</option></select>
   <select id="filterGA"><option value="">Alle Geräteart</option></select>
-  <input id="search" placeholder="Zoeken…" />
+  <input id="search" placeholder="Zoeken…">
 </div>
 
 <div class="dashboard">
@@ -113,39 +114,42 @@
   </div>
 </div>
 
-<footer>
-  Automatisch bijgewerkt via GitHub Actions
-</footer>
-
 <script>
 let brondata = [];
-let tableHead = document.querySelector("#dataTable thead");
-let tableBody = document.querySelector("#dataTable tbody");
+let kpChart, gaChart;
 
-fetch("output/dashboard_data.json")
-.then(r => r.json())
-.then(data => {
-  brondata = data.brondata;
-  initFilters(brondata);
-  renderTable(brondata);
-  renderCharts(brondata);
+document.getElementById("upload").addEventListener("change", e => {
+  const file = e.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = evt => {
+    const workbook = XLSX.read(evt.target.result, { type: "binary" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    brondata = XLSX.utils.sheet_to_json(sheet);
+    initFilters(brondata);
+    render(brondata);
+  };
+
+  reader.readAsBinaryString(file);
 });
 
-function initFilters(data) {
-  fillSelect("filterKW", [...new Set(data.map(d => d.Kalenderweek))]);
-  fillSelect("filterKP", [...new Set(data.map(d => d.Kostenplaats))]);
-  fillSelect("filterGA", [...new Set(data.map(d => d.Geräteart))]);
-}
-
-function fillSelect(id, values) {
-  const sel = document.getElementById(id);
-  values.filter(v => v).sort().forEach(v => {
-    sel.innerHTML += `<option value="${v}">${v}</option>`;
-  });
-  sel.onchange = applyFilters;
-}
-
 document.getElementById("search").oninput = applyFilters;
+filterKW.onchange = applyFilters;
+filterKP.onchange = applyFilters;
+filterGA.onchange = applyFilters;
+
+function initFilters(data) {
+  fill("filterKW", "Kalenderweek", data);
+  fill("filterKP", "Kostenplaats", data);
+  fill("filterGA", "Geräteart", data);
+}
+
+function fill(id, key, data) {
+  const s = document.getElementById(id);
+  s.innerHTML = `<option value="">Alle</option>`;
+  [...new Set(data.map(d => d[key]))].filter(Boolean).sort()
+    .forEach(v => s.innerHTML += `<option>${v}</option>`);
+}
 
 function applyFilters() {
   const kw = filterKW.value;
@@ -153,58 +157,48 @@ function applyFilters() {
   const ga = filterGA.value;
   const q  = search.value.toLowerCase();
 
-  const filtered = brondata.filter(r =>
-    (!kw || r.Kalenderweek === kw) &&
-    (!kp || r.Kostenplaats === kp) &&
-    (!ga || r.Geräteart === ga) &&
-    (Object.values(r).join(" ").toLowerCase().includes(q))
+  const f = brondata.filter(r =>
+    (!kw || r.Kalenderweek == kw) &&
+    (!kp || r.Kostenplaats == kp) &&
+    (!ga || r.Geräteart == ga) &&
+    Object.values(r).join(" ").toLowerCase().includes(q)
   );
 
-  renderTable(filtered);
-  renderCharts(filtered);
+  render(f);
 }
 
-function renderTable(rows) {
+function render(rows) {
   if (!rows.length) return;
 
-  tableHead.innerHTML = "<tr>" +
-    Object.keys(rows[0]).map(h => `<th>${h}</th>`).join("") +
-    "</tr>";
+  // tabel
+  dataTable.tHead.innerHTML =
+    "<tr>" + Object.keys(rows[0]).map(h => `<th>${h}</th>`).join("") + "</tr>";
 
-  tableBody.innerHTML = rows.map(r =>
-    "<tr>" + Object.values(r).map(v => `<td>${v}</td>`).join("") + "</tr>"
-  ).join("");
+  dataTable.tBodies[0].innerHTML =
+    rows.map(r => "<tr>" +
+      Object.values(r).map(v => `<td>${v}</td>`).join("") + "</tr>").join("");
+
+  charts(rows);
 }
 
-let kpChart, gaChart;
-
-function renderCharts(data) {
+function charts(data) {
   if (kpChart) kpChart.destroy();
   if (gaChart) gaChart.destroy();
 
-  const sum = (arr, key, val) =>
-    Object.entries(arr.reduce((a, c) => {
-      a[c[key]] = (a[c[key]] || 0) + c[val];
-      return a;
-    }, {}));
+  const sum = (k) =>
+    Object.entries(data.reduce((a,c)=>{a[c[k]]=(a[c[k]]||0)+Number(c.Tijd||0);return a;},{}));
 
-  const kp = sum(data, "Kostenplaats", "Tijd");
-  const ga = sum(data, "Geräteart", "Tijd");
+  const kp = sum("Kostenplaats");
+  const ga = sum("Geräteart");
 
-  kpChart = new Chart(kpChartElem = document.getElementById("kpChart"), {
-    type: "bar",
-    data: {
-      labels: kp.map(x => x[0]),
-      datasets: [{ label: "Uren", data: kp.map(x => x[1]) }]
-    }
+  kpChart = new Chart(kpChartElem = kpChartElem || kpChartElem, {
+    type:'bar',
+    data:{labels:kp.map(x=>x[0]),datasets:[{label:'Uren',data:kp.map(x=>x[1])}]}
   });
 
-  gaChart = new Chart(gaChartElem = document.getElementById("gaChart"), {
-    type: "bar",
-    data: {
-      labels: ga.map(x => x[0]),
-      datasets: [{ label: "Uren", data: ga.map(x => x[1]) }]
-    }
+  gaChart = new Chart(gaChartElem = gaChartElem || gaChartElem, {
+    type:'bar',
+    data:{labels:ga.map(x=>x[0]),datasets:[{label:'Uren',data:ga.map(x=>x[1])}]}
   });
 }
 </script>
