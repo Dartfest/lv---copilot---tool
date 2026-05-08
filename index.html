@@ -2,273 +2,204 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>LV Intelligence – Complete Tool</title>
+<title>Werkdagen & Kosten Dashboard</title>
 
 <style>
-body { font-family: Arial; margin:0; background:#eef2f7; }
-.header { background:#0f172a; color:#fff; padding:15px; font-size:22px; }
-.container { padding:20px; }
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: #eef2f7;
+  }
 
-textarea { width:100%; height:140px; margin-bottom:10px; }
+  header {
+    background: #0f172a;
+    color: #fff;
+    padding: 15px;
+    font-size: 22px;
+  }
 
-button {
-  padding:10px 15px;
-  background:#2563eb;
-  color:#fff;
-  border:none;
-  cursor:pointer;
-  margin-right:5px;
-  margin-top:5px;
-}
+  .container {
+    padding: 20px;
+  }
 
-.section { background:#fff; padding:20px; margin-top:15px; border-radius:10px; }
+  .section {
+    background: #fff;
+    padding: 20px;
+    margin-top: 15px;
+    border-radius: 10px;
+  }
 
-.high { color:#dc2626; }
-.mid { color:#f59e0b; }
+  label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+  }
 
-.oz { background:#f9fafb; padding:10px; margin-top:10px; border-radius:6px; }
+  input, select {
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+  }
+
+  button {
+    margin-top: 15px;
+    padding: 10px 15px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background: #1e40af;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: center;
+  }
+
+  th {
+    background: #f1f5f9;
+  }
+
+  .kpi {
+    display: inline-block;
+    margin-right: 20px;
+    font-size: 18px;
+  }
 </style>
 </head>
 
 <body>
 
-<div class="header">LV Intelligence – Directie Analyse + OZ Export</div>
+<header>
+  Werkdagen, Kosten & Stuurgegevens
+</header>
 
 <div class="container">
 
-<input type="file" id="pdfFile" accept=".pdf"><br><br>
+  <!-- ================= WORKDAY INPUT ================= -->
+  <div class="section">
+    <h2>Nieuwe werkdag</h2>
 
-<textarea id="lvText" placeholder="Plak LV tekst of upload PDF"></textarea>
+    <label>Datum</label>
+    <input type="date" id="date">
 
-<button onclick="analyse()">Analyse</button>
-<button onclick="extractOZ()">Genereer OZ lijst</button>
-<button onclick="exportOZ()">Export OZ (.txt)</button>
+    <label>Project</label>
+    <input type="text" id="project">
 
-<div id="out"></div>
-<div id="ozOut"></div>
+    <label>Begintijd</label>
+    <input type="time" id="start">
+
+    <label>Eindtijd</label>
+    <input type="time" id="end">
+
+    <label>Stilstand (uren)</label>
+    <input type="number" id="downtime" value="0" step="0.25">
+
+    <label>Kosten (€)</label>
+    <input type="number" id="cost" value="0" step="0.01">
+
+    <label>Bon upload</label>
+    <input type="file" id="receipt">
+
+    <button onclick="saveWorkday()">Opslaan</button>
+  </div>
+
+  <!-- ================= DASHBOARD ================= -->
+  <div class="section">
+    <h2>Stuurgegevens (maand)</h2>
+    <div class="kpi" id="kpiDays">Werkdagen: 0</div>
+    <div class="kpi" id="kpiHours">Uren: 0</div>
+    <div class="kpi" id="kpiCosts">Kosten: €0</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Project</th>
+          <th>Uren</th>
+          <th>Stilstand</th>
+          <th>Kosten (€)</th>
+          <th>Bon</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
 
 </div>
 
 <script>
+  let data = JSON.parse(localStorage.getItem("workdays")) || [];
 
-// ===== PDF =====
-function loadScript(url){
-  return new Promise(res=>{
-    let s=document.createElement("script");
-    s.src=url;
-    s.onload=res;
-    document.body.appendChild(s);
-  });
-}
+  function calculateHours(start, end, downtime) {
+    const s = new Date("1970-01-01T" + start);
+    const e = new Date("1970-01-01T" + end);
+    return ((e - s) / 3600000) - downtime;
+  }
 
-async function handlePDF(file){
-  try{
-    if(typeof pdfjsLib==="undefined"){
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+  function saveWorkday() {
+    const date = date.value;
+    const project = project.value;
+    const start = start.value;
+    const end = end.value;
+    const downtime = parseFloat(downtime.value) || 0;
+    const cost = parseFloat(cost.value) || 0;
+    const receipt = receipt.files.length > 0 ? receipt.files[0].name : "—";
+
+    if (!date || !start || !end) {
+      alert("Datum en tijden zijn verplicht");
+      return;
     }
 
-    let reader=new FileReader();
+    const hours = calculateHours(start, end, downtime);
 
-    reader.onload=async function(){
-      let pdf=await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-      let text="";
+    data.push({ date, project, hours, downtime, cost, receipt });
+    localStorage.setItem("workdays", JSON.stringify(data));
 
-      for(let i=1;i<=pdf.numPages;i++){
-        let page=await pdf.getPage(i);
-        let c=await page.getTextContent();
-        text+=c.items.map(i=>i.str).join(" ")+"\n";
-      }
-
-      lvText.value=text;
-    };
-
-    reader.readAsArrayBuffer(file);
-
-  }catch(e){
-    alert("PDF fout: "+e);
-  }
-}
-
-pdfFile.onchange=e=>{
-  if(e.target.files[0]) handlePDF(e.target.files[0]);
-};
-
-// ===== FASES =====
-const fases = [
-  {name:"Bauabschnitt 1", plan:"Planstraße C", periode:"06/2026 → 07/2027"},
-  {name:"Bauabschnitt 2", plan:"Planstraße E", periode:"aansluitend → 07/2027"},
-  {name:"Bauabschnitt 3", plan:"Planstraße D Teil 1", periode:"08/2027 → 05/2028"},
-  {name:"Bauabschnitt 4", plan:"Planstraße D Teil 2", periode:"aansluitend → 05/2028"}
-];
-
-// ===== ANALYSE =====
-function analyse(){
-
-  let html = `
-  <div class="section">
-    <h2>Kritieke Pad</h2>
-    <p class="high">BA1 → BA2 → BA3 → BA4</p>
-    <p>Geen parallel uitvoering mogelijk – volledige afhankelijkheid</p>
-  </div>
-  `;
-
-  fases.forEach(f=>{
-    html += `
-    <div class="section">
-      <h2>${f.name} – ${f.plan}</h2>
-      <p><b>${f.periode}</b></p>
-
-      <p>
-      Deze fase omvat alle civieltechnische werkzaamheden zoals riolering,
-      nutsvoorzieningen en infrastructuur.
-      De uitvoering moet aaneengesloten plaatsvinden zonder onderbreking.
-      </p>
-
-      <p class="high">
-      Kritische fase zonder buffer – vertraging werkt direct door.
-      </p>
-
-      <h3>Werkzaamheden</h3>
-      <ul>
-        <li>Riolering (kanaalbouw)</li>
-        <li>Nutsvoorzieningen</li>
-        <li>Bouwwegen</li>
-        <li>Grondwerk</li>
-        <li>Aansluitingen</li>
-      </ul>
-
-      <h3>Risico’s</h3>
-      <ul>
-        <li class="high">Geen parallel uitvoering</li>
-        <li class="high">Strikte deadline</li>
-        <li class="mid">Afhankelijk derden</li>
-      </ul>
-    </div>
-    `;
-  });
-
-  out.innerHTML = html;
-}
-
-// ===== OZ DATA =====
-let ozData = [];
-
-// ===== OZ EXTRACT (VERBETERD, incl. Leistungsbeschreibung en aantal) =====
-function extractOZ(){
-
-  let text = lvText.value;
-  let lines = text.split("\n");
-
-  ozData = [];
-  let current = null;
-
-  lines.forEach(line => {
-
-    if(line.match(/oz\s*\d+/i)){
-
-      if(current) ozData.push(current);
-
-      current = {
-        title: line.trim(),
-        desc: "",
-        leistungsbeschreibung: "",
-        amount: ""
-      };
-
-    } else if(current){
-      current.desc += " " + line.trim();
-
-      // Zoek een mogelijke Leistungsbeschreibung (voorbeeld: zoek na "Leistungsbeschreibung:" of "Beschrijving:")
-      let lbMatch = line.match(/Leistungsbeschreibung[:\s]*(.*)/i) || line.match(/Beschrijving[:\s]*(.*)/i);
-      if(lbMatch){
-        current.leistungsbeschreibung = lbMatch[1].trim();
-      }
-
-      // Zoek mogelijke hoeveelheden (voorbeeld: '100 m2', '50 psch', etc.)
-      let amountMatch = line.match(/(\d+(\.\d+)?\s*(m2|psch|st|kg|m3))/i);
-      if(amountMatch){
-        current.amount = amountMatch[1];
-      }
-    }
-
-  });
-
-  if(current) ozData.push(current);
-
-  let html = `<div class="section"><h2>OZ Lijst + Vertaling</h2>`;
-
-  ozData.forEach(item=>{
-
-    let nl = translateOZ(item.desc);
-
-    html += `
-    <div class="oz">
-      <b>${item.title}</b><br><br>
-      <div><b>Leistungsbeschreibung:</b> ${item.leistungsbeschreibung || "Niet gevonden"}</div>
-      <div><b>Aantal:</b> ${item.amount || "Niet gevonden"}</div>
-      <br>
-      <div>${item.desc || "Geen omschrijving gevonden"}</div>
-      <br>
-      <div style="color:#374151;"><i>${nl}</i></div>
-    </div>
-    `;
-  });
-
-  html += "</div>";
-
-  ozOut.innerHTML = html;
-}
-
-// ===== VERTALING =====
-function translateOZ(text){
-
-  if(!text) return "";
-
-  let t = text;
-
-  const map = {
-    "Kanal":"riolering",
-    "Leitung":"leiding",
-    "verlegen":"aanleggen",
-    "herstellen":"realiseren",
-    "Erschließung":"aanleg",
-    "Versorgung":"nutsvoorziening",
-    "Bauarbeiten":"bouwwerkzaamheden"
-  };
-
-  for(let k in map){
-    let reg = new RegExp(k,"gi");
-    t = t.replace(reg, map[k]);
+    render();
   }
 
-  return t;
-}
+  function render() {
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = "";
 
-// ===== EXPORT =====
-function exportOZ(){
+    let totalHours = 0;
+    let totalCosts = 0;
 
-  if(ozData.length === 0){
-    alert("Geen OZ data");
-    return;
+    data.forEach(d => {
+      totalHours += d.hours;
+      totalCosts += d.cost;
+
+      tbody.innerHTML += `
+        <tr>
+          <td>${d.date}</td>
+          <td>${d.project}</td>
+          <td>${d.hours.toFixed(2)}</td>
+          <td>${d.downtime}</td>
+          <td>${d.cost.toFixed(2)}</td>
+          <td>${d.receipt}</td>
+        </tr>
+      `;
+    });
+
+    document.getElementById("kpiDays").innerText = "Werkdagen: " + data.length;
+    document.getElementById("kpiHours").innerText = "Uren: " + totalHours.toFixed(2);
+    document.getElementById("kpiCosts").innerText = "Kosten: €" + totalCosts.toFixed(2);
   }
 
-  let content = ozData.map(item =>
-    item.title + "\n" +
-    "Leistungsbeschreibung: " + (item.leistungsbeschreibung || "") + "\n" +
-    "Aantal: " + (item.amount || "") + "\n" +
-    item.desc + "\n" +
-    "NL: " + translateOZ(item.desc) + "\n\n"
-  ).join("");
-
-  let blob = new Blob([content], {type:"text/plain"});
-  let a = document.createElement("a");
-
-  a.href = URL.createObjectURL(blob);
-  a.download = "OZ_lijst.txt";
-  a.click();
-}
-
+  render();
 </script>
 
 </body>
 </html>
+``
