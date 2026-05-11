@@ -66,10 +66,17 @@ button:hover {
 <body>
   <div class="card">
     <h1>🚿 Je moet douchen!</h1>
-    <p>Tijd om fris en schoon te worden 😎</p>
-    <button onclick="alert('Ga onder die douche 🚿')">
-      Oké 😅
-    </button>
+    <p>En daar word ik een hele grote blij van 😄</p>
+    <p>Fris, schoon en helemaal top ✨</p>
+    <button onclick="showMessage()">
+      Ik ga douchen 😅
+    </button><p id="extraMessage" style="margin-top:20px;font-weight:bold;"></p>
+
   </div>
+  <script>
+    function showMessage() {
+      document.getElementById('extraMessage').innerText = 'Yesss 😍 Daar word ik echt super blij van! 🚿✨';
+    }
+  </script>
 </body>
 </html>
