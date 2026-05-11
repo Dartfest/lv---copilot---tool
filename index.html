@@ -1,8 +1,10 @@
-<!DOCTYPE html><html lang="nl">
+<!DOCTYPE html>
+<html lang="nl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Je Moet Douchen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Voor Esther ❤️</title>
+
   <style>
     body {
       margin: 0;
@@ -10,73 +12,123 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      background: linear-gradient(135deg, #4facfe, #00f2fe);
-      font-family: Arial, sans-serif;
       overflow: hidden;
-    }.card {
-  background: rgba(255,255,255,0.15);
-  backdrop-filter: blur(10px);
-  padding: 40px;
-  border-radius: 25px;
-  text-align: center;
-  color: white;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.25);
-  animation: float 3s ease-in-out infinite;
-}
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #ff758c, #ff7eb3);
+    }
 
-h1 {
-  font-size: 3rem;
-  margin-bottom: 15px;
-}
+    .card {
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(12px);
+      padding: 50px;
+      border-radius: 30px;
+      text-align: center;
+      color: white;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      animation: float 4s ease-in-out infinite;
+      max-width: 700px;
+    }
 
-p {
-  font-size: 1.2rem;
-  opacity: 0.9;
-}
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 20px;
+    }
 
-button {
-  margin-top: 20px;
-  padding: 14px 28px;
-  border: none;
-  border-radius: 12px;
-  background: white;
-  color: #00a2ff;
-  font-size: 1rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: 0.3s;
-}
+    p {
+      font-size: 1.4rem;
+      line-height: 1.6;
+    }
 
-button:hover {
-  transform: scale(1.05);
-  background: #f1f1f1;
-}
+    button {
+      margin-top: 25px;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 15px;
+      background: white;
+      color: #ff4f87;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.3s;
+    }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
+    button:hover {
+      transform: scale(1.08);
+    }
 
+    #extra {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+
+    @keyframes float {
+      0%, 100% {
+        transform: translateY(0px);
+      }
+      50% {
+        transform: translateY(-12px);
+      }
+    }
+
+    .heart {
+      position: absolute;
+      color: white;
+      font-size: 20px;
+      animation: fall linear infinite;
+      opacity: 0.7;
+    }
+
+    @keyframes fall {
+      from {
+        transform: translateY(-100px);
+      }
+      to {
+        transform: translateY(110vh);
+      }
+    }
   </style>
 </head>
-<body>
-  <div class="card">
-    <h1>🚿 Je moet douchen!</h1>
-    <p>En daar word ik een hele grote blij van 😄</p>
-    <p>Fris, schoon en helemaal top ✨</p>
-    <button onclick="showMessage()">
-      Ik ga douchen 😅
-    </button><p id="extraMessage" style="margin-top:20px;font-weight:bold;"></p>
 
+<body>
+
+  <div class="card">
+    <h1>❤️ Esther Linan ❤️</h1>
+
+    <p>
+      Esther Linan is mijn allergrootste liefde van de hele wereld 🌍❤️
+    </p>
+
+    <p>
+      Niemand betekent zoveel voor mij als zij ✨
+    </p>
+
+    <button onclick="showLove()">
+      Klik hier ❤️
+    </button>
+
+    <div id="extra"></div>
   </div>
+
   <script>
-    function showMessage() {
-      document.getElementById('extraMessage').innerText = 'Yesss 😍 Daar word ik echt super blij van! 🚿✨';
+    function showLove() {
+      document.getElementById("extra").innerHTML =
+        "Ik hou ontzettend veel van jou Esther ❤️";
+    }
+
+    // Vallende hartjes
+    for (let i = 0; i < 30; i++) {
+      let heart = document.createElement("div");
+      heart.classList.add("heart");
+      heart.innerHTML = "❤️";
+
+      heart.style.left = Math.random() * 100 + "vw";
+      heart.style.animationDuration = (3 + Math.random() * 5) + "s";
+      heart.style.fontSize = (15 + Math.random() * 25) + "px";
+
+      document.body.appendChild(heart);
     }
   </script>
+
 </body>
 </html>
