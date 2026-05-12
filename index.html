@@ -57,12 +57,6 @@
     }
 
     #extra {
-      margin-top: 20px;
-      font-size: 1.2rem;
-      font-weight: bold;
-    }
-
-    .love-text {
       margin-top: 25px;
       font-size: 1.2rem;
       font-weight: bold;
@@ -115,34 +109,28 @@
     </button>
 
     <div id="extra"></div>
-
-    <div class="love-text">
-      Jij bent mijn empanadas 🥟<br>
-      Mijn tortilla 🌮<br><br>
-
-      Jij maakt mij hele grote blij ☺️❤️<br><br>
-
-      Daarom weet ik ook zeker...<br>
-      Ikke willen jou niet kwijt ❤️
-    </div>
-
   </div>
 
   <script>
     function showLove() {
       document.getElementById("extra").innerHTML =
-        "Esther is een vrouw met hele mooie en goede kwaliteiten ❤️✨<br><br>En ik word daar een hele grote blij van 🍆😄";
+        "Esther is een vrouw met hele mooie en goede kwaliteiten ❤️✨<br><br>" +
+        "En ik word daar een hele grote blij van 🍆😄<br><br>" +
+        "Jij bent mijn empanadas 🥟<br>" +
+        "Mijn tortilla 🌮<br><br>" +
+        "Daarom weet ik ook zeker...<br>" +
+        "Ikke willen jou niet kwijt ❤️☺️";
     }
 
     // Vallende hartjes
     for (let i = 0; i < 30; i++) {
-      let heart = document.createElement("div");
-      heart.classList.add("heart");
-      heart.innerHTML = "❤️";
+      let heart = document.createElement('div');
+      heart.classList.add('heart');
+      heart.innerHTML = '❤️';
 
-      heart.style.left = Math.random() * 100 + "vw";
-      heart.style.animationDuration = (3 + Math.random() * 5) + "s";
-      heart.style.fontSize = (15 + Math.random() * 25) + "px";
+      heart.style.left = Math.random() * 100 + 'vw';
+      heart.style.animationDuration = (3 + Math.random() * 5) + 's';
+      heart.style.fontSize = (15 + Math.random() * 25) + 'px';
 
       document.body.appendChild(heart);
     }
