@@ -3,23 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kanalbau AI v1.0</title>
+<title>Kanalbau AI v2.0</title>
 
 <style>
 
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Arial,Helvetica,sans-serif;
-}
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}
 
-body{
-background:#eef2f7;
-display:flex;
-height:100vh;
-overflow:hidden;
-}
+body{background:#eef2f7;display:flex;height:100vh;}
 
 .sidebar{
 width:250px;
@@ -29,33 +19,26 @@ padding:20px;
 }
 
 .logo{
-font-size:28px;
+font-size:26px;
 font-weight:bold;
-margin-bottom:30px;
 text-align:center;
+margin-bottom:30px;
 }
 
 .menu button{
 width:100%;
-padding:15px;
+padding:14px;
 margin-bottom:10px;
 border:none;
 background:#1e293b;
 color:white;
-cursor:pointer;
 border-radius:8px;
-font-size:16px;
+cursor:pointer;
 }
 
-.menu button:hover{
-background:#2563eb;
-}
+.menu button:hover{background:#2563eb;}
 
-.main{
-flex:1;
-padding:25px;
-overflow:auto;
-}
+.main{flex:1;padding:25px;overflow:auto;}
 
 .cards{
 display:grid;
@@ -71,15 +54,7 @@ border-radius:12px;
 box-shadow:0 3px 10px rgba(0,0,0,.1);
 }
 
-.card h2{
-color:#2563eb;
-font-size:34px;
-}
-
-.card p{
-margin-top:8px;
-color:#666;
-}
+.card h2{color:#2563eb;font-size:28px;}
 
 .panel{
 background:white;
@@ -91,27 +66,21 @@ margin-bottom:20px;
 
 textarea{
 width:100%;
-height:220px;
+height:200px;
 padding:15px;
-font-size:15px;
 border-radius:8px;
 border:1px solid #ccc;
-resize:vertical;
 }
 
 button.analyse{
 margin-top:15px;
-padding:14px 30px;
+padding:14px 25px;
 background:#2563eb;
 color:white;
 border:none;
 border-radius:8px;
-font-size:18px;
+font-size:16px;
 cursor:pointer;
-}
-
-button.analyse:hover{
-background:#1d4ed8;
 }
 
 .result{
@@ -119,52 +88,43 @@ margin-top:20px;
 padding:20px;
 background:#f8fafc;
 border-radius:10px;
-line-height:2;
 }
 
 .green{color:green;font-weight:bold;}
 .red{color:red;font-weight:bold;}
+.orange{color:orange;font-weight:bold;}
 
 </style>
-
 </head>
 
 <body>
 
 <div class="sidebar">
-
-<div class="logo">
-KANALBAU AI
-</div>
+<div class="logo">KANALBAU AI</div>
 
 <div class="menu">
-
 <button>🏠 Dashboard</button>
 <button>📧 Inbox</button>
 <button>📁 Projecten</button>
 <button>⭐ Favorieten</button>
-<button>⚙ Instellingen</button>
-
 </div>
-
 </div>
 
 <div class="main">
 
 <div class="cards">
-
 <div class="card">
 <h2 id="mailCount">0</h2>
-<p>Geanalyseerde mails</p>
+<p>Mails</p>
 </div>
 
 <div class="card">
-<h2 id="interesting">0</h2>
-<p>Interessante projecten</p>
+<h2 id="topCount">0</h2>
+<p>TOP projecten</p>
 </div>
 
 <div class="card">
-<h2>100 km</h2>
+<h2>100km</h2>
 <p>Werkgebied</p>
 </div>
 
@@ -172,289 +132,145 @@ KANALBAU AI
 <h2>NRW</h2>
 <p>Regio</p>
 </div>
-
 </div>
 
 <div class="panel">
+<h2>📧 Plak email</h2><br>
 
-<h2>📧 Plak hier de Vergabemarktplatz e-mail</h2>
+<textarea id="mail"></textarea><br>
 
-<br>
+<button class="analyse" onclick="analyseMail()">Analyseer</button>
 
-<textarea id="mail"></textarea>
-
-<br>
-
-<button class="analyse" onclick="analyseMail()">
-
-Analyseer Project
-
-</button>
-
-<div class="result" id="result">
-
-Nog geen analyse uitgevoerd.
-
-</div>
-
+<div class="result" id="result">Nog geen analyse</div>
 </div>
 
 </div>
 
 <script>
 
-function analyseMail(){
+// ===== DATA =====
 
-let text=document.getElementById("mail").value.toLowerCase();
-
-let score=0;
-
-let redenen=[];
-
-if(text.includes("kanalbau")){
-score+=40;
-redenen.push("✔ Kanalbau");
-}
-
-if(text.includes("tiefbau")){
-score+=30;
-redenen.push("✔ Tiefbau");
-}
-
-if(text.includes("erschließung")){
-score+=25;
-redenen.push("✔ Erschließung");
-}
-
-if(text.includes("druckrohr")){
-score+=25;
-redenen.push("✔ Druckrohrleitung");
-}
-
-if(text.includes("schmutzwasser")){
-score+=20;
-redenen.push("✔ Schmutzwasser");
-}
-
-if(text.includes("regenwasser")){
-score+=15;
-redenen.push("✔ Regenwasser");
-}
-
-if(text.includes("straßenbau")){
-score+=15;
-redenen.push("✔ Straßenbau");
-}
-
-if(text.includes("sanitär")){
-score-=70;
-redenen.push("✖ Sanitair");
-}
-
-if(text.includes("elektro")){
-score-=60;
-redenen.push("✖ Elektro");
-}
-
-if(text.includes("dach")){
-score-=60;
-redenen.push("✖ Dakwerk");
-}
-
-let beoordeling="Niet interessant";
-
-let kleur="red";
-
-if(score>=60){
-
-beoordeling="ZEER INTERESSANT";
-
-kleur="green";
-
-document.getElementById("interesting").innerHTML=Number(document.getElementById("interesting").innerHTML)+1;
-
-}
-
-document.getElementById("mailCount").innerHTML=Number(document.getElementById("mailCount").innerHTML)+1;
-
-document.getElementById("result").innerHTML=
-"<h2>Analyse</h2><br>"+
-"<b>Score:</b> "+score+"<br>"+
-"<b>Status:</b> <span class='"+kleur+"'>"+beoordeling+"</span><br><br>"+
-redenen.join("<br>");
-
-}
-// ===== DEEL 1B =====
-
-let plaatsen = [
-"Dülmen",
-"Ahaus",
-"Münster",
-"Coesfeld",
-"Bocholt",
-"Borken",
-"Stadtlohn",
-"Vreden",
-"Gescher",
-"Ibbenbüren"
+let keywords = [
+{ woord:"kanalbau", score:40 },
+{ woord:"tiefbau", score:30 },
+{ woord:"erschließung", score:25 },
+{ woord:"druckrohr", score:25 },
+{ woord:"schmutzwasser", score:20 },
+{ woord:"regenwasser", score:15 },
+{ woord:"straßenbau", score:15 },
+{ woord:"sanitär", score:-70 },
+{ woord:"elektro", score:-60 },
+{ woord:"dach", score:-60 }
 ];
 
-function zoekPlaats(tekst){
+let plaatsen = [
+"Dülmen","Ahaus","Münster","Bocholt","Borken",
+"Vreden","Coesfeld","Gescher","Ibbenbüren"
+];
 
-for(let plaats of plaatsen){
+// ===== FUNCTIES =====
 
-if(tekst.toLowerCase().includes(plaats.toLowerCase())){
+function zoekPlaatsen(tekst){
+let gevonden=[];
 
-return plaats;
-
+plaatsen.forEach(p=>{
+if(tekst.toLowerCase().includes(p.toLowerCase())){
+gevonden.push(p);
 }
+});
 
-}
-
-return "Onbekend";
-
+return gevonden.length ? gevonden.join(", ") : "Onbekend";
 }
 
 function zoekDeadline(tekst){
 
-let regex = /\d{1,2}[.-]\d{1,2}[.-]\d{2,4}/g;
+let regex1 = /\d{1,2}[.-]\d{1,2}[.-]\d{2,4}/g;
+let regex2 = /\d{1,2}\s(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\s\d{4}/gi;
 
-let gevonden = tekst.match(regex);
+let m1 = tekst.match(regex1);
+let m2 = tekst.match(regex2);
 
-if(gevonden){
-
-return gevonden[0];
-
-}
+if(m1) return m1[0];
+if(m2) return m2[0];
 
 return "Niet gevonden";
-
 }
 
-function zoekOpdrachtgever(tekst){
+function zoekOpdrachtgever(t){
 
-if(tekst.includes("stadt")){
-
-return "Stadt";
-
-}
-
-if(tekst.includes("gemeinde")){
-
-return "Gemeinde";
-
-}
-
-if(tekst.includes("kreis")){
-
-return "Kreis";
-
-}
+if(t.includes("stadt")) return "Stadt";
+if(t.includes("gemeinde")) return "Gemeinde";
+if(t.includes("kreis")) return "Kreis";
+if(t.includes("gmbh")) return "Bedrijf";
 
 return "Onbekend";
-
 }
 
-// oude functie vervangen
+let projecten = JSON.parse(localStorage.getItem("projecten")) || [];
+
+function opslaan(p){
+projecten.push(p);
+localStorage.setItem("projecten", JSON.stringify(projecten));
+}
+
+// ===== HOOFDFUNCTIE =====
 
 function analyseMail(){
 
-let origineleTekst = document.getElementById("mail").value;
-
-let text = origineleTekst.toLowerCase();
+let originele = document.getElementById("mail").value;
+let text = originele.toLowerCase();
 
 let score = 0;
-
 let redenen = [];
 
-if(text.includes("kanalbau")){
-score += 40;
-redenen.push("✔ Kanalbau");
+// keyword analyse
+keywords.forEach(k=>{
+if(text.includes(k.woord)){
+score += k.score;
+redenen.push((k.score>0?"✔ ":"✖ ")+k.woord);
 }
+});
 
-if(text.includes("tiefbau")){
-score += 30;
-redenen.push("✔ Tiefbau");
-}
-
-if(text.includes("erschließung")){
-score += 25;
-redenen.push("✔ Erschließung");
-}
-
-if(text.includes("druckrohr")){
-score += 25;
-redenen.push("✔ Druckrohrleitung");
-}
-
-if(text.includes("schmutzwasser")){
-score += 20;
-redenen.push("✔ Schmutzwasser");
-}
-
-if(text.includes("regenwasser")){
-score += 15;
-redenen.push("✔ Regenwasser");
-}
-
-if(text.includes("straßenbau")){
-score += 15;
-redenen.push("✔ Straßenbau");
-}
-
-if(text.includes("sanitär")){
-score -= 70;
-redenen.push("✖ Sanitair");
-}
-
-if(text.includes("elektro")){
-score -= 60;
-redenen.push("✖ Elektro");
-}
-
-if(text.includes("dach")){
-score -= 60;
-redenen.push("✖ Dakwerk");
-}
-
-let plaats = zoekPlaats(origineleTekst);
-
-let deadline = zoekDeadline(origineleTekst);
-
+// extra data
+let plaats = zoekPlaatsen(originele);
+let deadline = zoekDeadline(originele);
 let opdrachtgever = zoekOpdrachtgever(text);
 
-let beoordeling = "Niet interessant";
-let kleur = "red";
+// beoordeling
+let status="Niet interessant";
+let kleur="red";
 
-if(score >= 60){
+if(score>=80){ status="🔥 TOP PROJECT"; kleur="green"; }
+else if(score>=60){ status="ZEER INTERESSANT"; kleur="green"; }
+else if(score>=40){ status="MOGELIJK INTERESSANT"; kleur="orange"; }
 
-beoordeling = "ZEER INTERESSANT";
-kleur = "green";
+// tellers
+document.getElementById("mailCount").innerHTML++;
+
+if(score>=80){
+document.getElementById("topCount").innerHTML++;
+}
+
+// opslaan
+opslaan({plaats,deadline,opdrachtgever,score,status});
+
+// output
+document.getElementById("result").innerHTML = `
+<h2>Analyse</h2><hr><br>
+
+<b>📍 Plaats:</b> ${plaats}<br>
+<b>📅 Deadline:</b> ${deadline}<br>
+<b>🏢 Opdrachtgever:</b> ${opdrachtgever}<br><br>
+
+<b>⭐ Score:</b> ${score}/100<br>
+<b>Status:</b> <span class="${kleur}">${status}</span><br><br>
+
+<b>Waarom:</b><br><br>
+${redenen.join("<br>")}
+`;
 
 }
 
-document.getElementById("mailCount").innerHTML =
-Number(document.getElementById("mailCount").innerHTML) + 1;
-
-document.getElementById("result").innerHTML =
-
-"<h2>Project Analyse</h2><hr><br>" +
-
-"<b>📍 Plaats:</b> " + plaats + "<br>" +
-
-"<b>📅 Deadline:</b> " + deadline + "<br>" +
-
-"<b>🏢 Opdrachtgever:</b> " + opdrachtgever + "<br>" +
-
-"<b>⭐ Score:</b> " + score + "/100<br>" +
-
-"<b>Status:</b> <span class='"+kleur+"'>" + beoordeling + "</span><br><br>" +
-
-"<b>Waarom interessant:</b><br><br>" +
-
-redenen.join("<br>");
-
-}
 </script>
 
 </body>
