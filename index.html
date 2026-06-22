@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Inbox</title>
+<title>Dashboard + Inbox</title>
 
 <style>
 body {
@@ -24,6 +24,7 @@ body {
   display: block;
   margin-bottom: 10px;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .content {
@@ -42,38 +43,72 @@ body {
   display: flex;
   justify-content: space-between;
 }
+
+.hidden {
+  display: none;
+}
 </style>
+
+<script>
+function showPage(page) {
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("inbox").classList.add("hidden");
+
+  document.getElementById(page).classList.remove("hidden");
+}
+</script>
+
 </head>
 
 <body>
 
 <div class="sidebar">
   <h2>Menu</h2>
-  <a href="index.html">Dashboard</a>
-  <a href="inbox.html">Inbox</a>
+
+  <a onclick="showPage('dashboard')">Dashboard</a>
+  <a onclick="showPage('inbox')">Inbox</a>
+
 </div>
 
 <div class="content">
-  <h1>Inbox</h1>
 
-  <!-- Project 1 -->
-  <div class="item">
-    <div class="top">
-      <strong>Kanalbau Dortmund</strong>
-      ⭐
-    </div>
-    <div>Dortmund • Stadt Dortmund</div>
-    <div>📅 01-07-2026 | 🟢 Score: 75</div>
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+    <h1>Dashboard</h1>
+    <p>Welkom bij je tool 👍</p>
   </div>
 
-  <!-- Project 2 -->
-  <div class="item">
-    <div class="top">
-      <strong>Tiefbau Essen</strong>
-      ⭐
+  <!-- INBOX -->
+  <div id="inbox" class="hidden">
+    <h1>Inbox</h1>
+
+    <div class="item">
+      <div class="top">
+        <strong>Kanalbau Dortmund</strong>
+        ⭐
+      </div>
+      <div>Dortmund • Stadt Dortmund</div>
+      <div>📅 01-07-2026 | 🟢 Score: 75</div>
     </div>
-    <div>Essen • Stadt Essen</div>
-    <div>📅 15-07-2026 | 🟡 Score: 65</div>
+
+    <div class="item">
+      <div class="top">
+        <strong>Tiefbau Essen</strong>
+        ⭐
+      </div>
+      <div>Essen • Stadt Essen</div>
+      <div>📅 15-07-2026 | 🟡 Score: 65</div>
+    </div>
+
+    <div class="item">
+      <div class="top">
+        <strong>Erschließung Bochum</strong>
+        ⭐
+      </div>
+      <div>Bochum • Stadt Bochum</div>
+      <div>📅 20-07-2026 | 🔴 Score: 45</div>
+    </div>
+
   </div>
 
 </div>
