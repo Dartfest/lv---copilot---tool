@@ -3,178 +3,432 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kanalbau AI FINAL</title>
+<title>Kanalbau AI</title>
 
 <style>
-body{font-family:Arial;background:#eef2f7;padding:20px;}
 
-textarea{width:100%;height:150px;padding:10px;}
-button{margin-top:10px;padding:10px 20px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;}
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
 
-.box{background:white;margin-top:15px;padding:12px;border-radius:8px;}
-.green{color:green;font-weight:bold;}
-.orange{color:orange;font-weight:bold;}
-.red{color:red;font-weight:bold;}
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    background:#eef2f7;
+}
+
+.sidebar{
+
+    position:fixed;
+
+    width:260px;
+
+    height:100vh;
+
+    background:#0f172a;
+
+    color:white;
+
+    left:0;
+
+    top:0;
+
+}
+
+.logo{
+
+    font-size:28px;
+
+    font-weight:bold;
+
+    text-align:center;
+
+    padding:30px;
+
+    border-bottom:1px solid #334155;
+
+}
+
+.menu{
+
+    margin-top:20px;
+
+}
+
+.menu a{
+
+    display:block;
+
+    color:white;
+
+    text-decoration:none;
+
+    padding:18px 25px;
+
+    transition:.3s;
+
+}
+
+.menu a:hover{
+
+    background:#1e293b;
+
+}
+
+.content{
+
+    margin-left:260px;
+
+    padding:30px;
+
+}
+
+.header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:30px;
+
+}
+
+.header h1{
+
+    color:#0f172a;
+
+}
+
+.cards{
+
+    display:grid;
+
+    grid-template-columns:repeat(4,1fr);
+
+    gap:20px;
+
+    margin-bottom:30px;
+
+}
+
+.card{
+
+    background:white;
+
+    padding:25px;
+
+    border-radius:12px;
+
+    box-shadow:0 5px 15px rgba(0,0,0,.1);
+
+}
+
+.card h2{
+
+    font-size:34px;
+
+    color:#2563eb;
+
+    margin-bottom:10px;
+
+}
+
+.card p{
+
+    color:#555;
+
+}
+
+.table{
+
+    background:white;
+
+    border-radius:12px;
+
+    overflow:hidden;
+
+    box-shadow:0 5px 15px rgba(0,0,0,.1);
+
+}
+
+table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+th{
+
+    background:#2563eb;
+
+    color:white;
+
+    padding:15px;
+
+}
+
+td{
+
+    padding:15px;
+
+    border-bottom:1px solid #eee;
+
+}
+
+.score-high{
+
+    color:green;
+
+    font-weight:bold;
+
+}
+
+.score-medium{
+
+    color:orange;
+
+    font-weight:bold;
+
+}
+
+.score-low{
+
+    color:red;
+
+    font-weight:bold;
+
+}
+
+button{
+
+    background:#2563eb;
+
+    color:white;
+
+    border:none;
+
+    padding:8px 18px;
+
+    border-radius:6px;
+
+    cursor:pointer;
+
+}
+
+button:hover{
+
+    background:#1d4ed8;
+
+}
+
+@media(max-width:1000px){
+
+.cards{
+
+grid-template-columns:repeat(2,1fr);
+
+}
+
+}
+
+@media(max-width:700px){
+
+.sidebar{
+
+width:100%;
+
+height:auto;
+
+position:relative;
+
+}
+
+.content{
+
+margin-left:0;
+
+}
+
+.cards{
+
+grid-template-columns:1fr;
+
+}
+
+}
+
 </style>
 
 </head>
 
 <body>
 
-<h2>📧 Email analyseren</h2>
+<div class="sidebar">
 
-<textarea id="mail"></textarea>
-<br>
-<button onclick="analyse()">Analyseer</button>
-
-<h2>📊 Resultaten</h2>
-<div id="result"></div>
-
-<h2>💾 Opgeslagen projecten</h2>
-<div id="saved"></div>
-
-<h2>🔍 Detail</h2>
-<div id="detail">Nog niets geselecteerd</div>
-
-<script>
-
-// ===== KEYWORDS =====
-let keywords = [
-{woord:"kanalbau",score:40},
-{woord:"tiefbau",score:30},
-{woord:"erschließung",score:25},
-{woord:"druckrohr",score:25},
-{woord:"schmutzwasser",score:20},
-{woord:"regenwasser",score:15},
-{woord:"straßenbau",score:15},
-{woord:"elektro",score:-60},
-{woord:"sanitär",score:-70}
-];
-
-// ===== STORAGE =====
-let saved = JSON.parse(localStorage.getItem("kanalbau")) || [];
-
-function saveData(){
-localStorage.setItem("kanalbau", JSON.stringify(saved));
-}
-
-// ===== ANALYSE =====
-function checkProject(text){
-
-let score = 0;
-let redenen = [];
-
-keywords.forEach(k=>{
-if(text.includes(k.woord)){
-score += k.score;
-redenen.push((k.score>0?"✔ ":"✖ ")+k.woord);
-}
-});
-
-let status="Niet interessant";
-let kleur="red";
-
-if(score>=80){status="🔥 TOP";kleur="green";}
-else if(score>=40){status="Interessant";kleur="orange";}
-
-return {score,status,kleur,redenen,text};
-
-}
-
-// ===== MAIN =====
-function analyse(){
-
-let input = document.getElementById("mail").value.toLowerCase();
-
-// ✅ SIMPEL & BETROUWBAAR split
-let stukken = input.split(/\n|\./);
-
-// fallback
-if(stukken.length < 2){
-stukken = [input];
-}
-
-let html="";
-window.current = [];
-
-stukken.forEach((stuk,i)=>{
-
-if(stuk.trim().length < 10) return;
-
-let p = checkProject(stuk);
-
-window.current.push(p);
-
-html += `
-<div class="box">
-<b>${p.status}</b> | Score ${p.score}<br>
-<button onclick="save(${i})">💾 Opslaan</button>
-<button onclick="detailCurrent(${i})">🔍 Detail</button>
+<div class="logo">
+KANALBAU AI
 </div>
-`;
 
-});
+<div class="menu">
 
-document.getElementById("result").innerHTML = html || "Geen tekst gevonden";
+<a href="#">🏠 Dashboard</a>
 
-}
+<a href="#">📧 Inbox</a>
 
-// ===== OPSLAAN =====
-function save(i){
+<a href="#">🤖 AI Analyse</a>
 
-let p = window.current[i];
+<a href="#">📁 Projecten</a>
 
-saved.push(p);
-saveData();
-renderSaved();
+<a href="#">💰 Bedarfsangebote</a>
 
-alert("✅ Opgeslagen");
+<a href="#">📊 Rapportages</a>
 
-}
+<a href="#">⚙ Instellingen</a>
 
-// ===== SAVED TONEN =====
-function renderSaved(){
-
-let html="";
-
-saved.forEach((p,i)=>{
-html += `
-<div class="box" onclick="detailSaved(${i})">
-<b>${p.status}</b> | ${p.score}
 </div>
-`;
-});
 
-document.getElementById("saved").innerHTML =
-html || "Nog niets opgeslagen";
+</div>
 
-}
+<div class="content">
 
-// ===== DETAIL =====
-function detailCurrent(i){
-let p = window.current[i];
-showDetail(p);
-}
+<div class="header">
 
-function detailSaved(i){
-let p = saved[i];
-showDetail(p);
-}
+<h1>Dashboard</h1>
 
-function showDetail(p){
+<h3>Welkom James</h3>
 
-document.getElementById("detail").innerHTML = `
-<b>Status:</b> <span class="${p.kleur}">${p.status}</span><br>
-<b>Score:</b> ${p.score}<br><br>
-${p.redenen.join("<br>")}
-`;
+</div>
 
-}
+<div class="cards">
 
-// init
-renderSaved();
+<div class="card">
 
-</script>
+<h2>28</h2>
+
+<p>Nieuwe aanbestedingen</p>
+
+</div>
+
+<div class="card">
+
+<h2>4</h2>
+
+<p>Interessante projecten</p>
+
+</div>
+
+<div class="card">
+
+<h2>18</h2>
+
+<p>Lopende projecten</p>
+
+</div>
+
+<div class="card">
+
+<h2>16-07</h2>
+
+<p>Eerstvolgende deadline</p>
+
+</div>
+
+</div>
+
+<div class="table">
+
+<table>
+
+<tr>
+
+<th>Score</th>
+
+<th>Project</th>
+
+<th>Plaats</th>
+
+<th>Deadline</th>
+
+<th>Status</th>
+
+<th>Actie</th>
+
+</tr>
+
+<tr>
+
+<td class="score-high">98</td>
+
+<td>Abwasserdruckrohrleitung Süskenbrock</td>
+
+<td>Dülmen</td>
+
+<td>16-07-2026</td>
+
+<td>⭐⭐⭐⭐⭐</td>
+
+<td><button>Open</button></td>
+
+</tr>
+
+<tr>
+
+<td class="score-high">91</td>
+
+<td>Inova Park</td>
+
+<td>Ibbenbüren</td>
+
+<td>14-07-2026</td>
+
+<td>⭐⭐⭐⭐</td>
+
+<td><button>Open</button></td>
+
+</tr>
+
+<tr>
+
+<td class="score-medium">82</td>
+
+<td>Wirtschaftswege</td>
+
+<td>Ahaus</td>
+
+<td>10-07-2026</td>
+
+<td>⭐⭐⭐</td>
+
+<td><button>Open</button></td>
+
+</tr>
+
+<tr>
+
+<td class="score-low">18</td>
+
+<td>Sanitair Düsseldorf</td>
+
+<td>Düsseldorf</td>
+
+<td>20-07-2026</td>
+
+<td>Niet interessant</td>
+
+<td><button>Open</button></td>
+
+</tr>
+
+</table>
+
+</div>
+
+</div>
 
 </body>
 </html>
