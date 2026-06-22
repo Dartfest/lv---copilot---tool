@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kanalbau AI v3 PRO</title>
+<title>Kanalbau AI v4 PRO</title>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:Arial;}
@@ -21,7 +21,7 @@ padding:20px;
 
 .main{flex:1;padding:20px;overflow:auto;}
 
-textarea{width:100%;height:150px;margin-top:10px;padding:10px;}
+textarea{width:100%;height:120px;padding:10px;}
 
 button{
 margin-top:10px;
@@ -36,18 +36,17 @@ cursor:pointer;
 .project{
 background:white;
 padding:15px;
-margin-top:15px;
+margin-top:10px;
 border-radius:10px;
 box-shadow:0 2px 8px rgba(0,0,0,.1);
 cursor:pointer;
 }
 
-.project:hover{background:#eef5ff;}
-
 .green{color:green;font-weight:bold;}
 .orange{color:orange;font-weight:bold;}
 .red{color:red;font-weight:bold;}
 
+.section{margin-top:20px;}
 </style>
 </head>
 
@@ -55,28 +54,36 @@ cursor:pointer;
 
 <div class="sidebar">
 <div class="logo">KANALBAU AI</div>
-<p>Multi Project Analyse</p>
+<p>Dashboard</p>
 </div>
 
 <div class="main">
 
-<h2>📧 Plak email</h2>
-
+<h2>📧 Email analyseren</h2>
 <textarea id="mail"></textarea>
+<button onclick="runAnalyse()">Analyseer</button>
 
-<button onclick="runAnalyse()">Analyseer alles</button>
+<div class="section">
+<h2>📊 Analyse resultaten</h2>
+<div id="resultaten"></div>
+</div>
 
-<h2 style="margin-top:20px;">📊 Gevonden projecten</h2>
-<div id="projectList"></div>
+<div class="section">
+<h2>💾 Opgeslagen projecten</h2>
+<div id="opslag"></div>
+</div>
 
-<h2 style="margin-top:20px;">🔍 Detail</h2>
-<div id="detail">Nog geen selectie</div>
+<div class="section">
+<h2>🔍 Detail</h2>
+<div id="detail">Nog niets geselecteerd</div>
+</div>
 
 </div>
 
 <script>
 
-// ===== KEYWORDS =====
+// ===== DATA =====
+
 let keywords = [
 { woord:"kanalbau", score:40 },
 { woord:"tiefbau", score:30 },
@@ -90,19 +97,26 @@ let keywords = [
 { woord:"dach", score:-60 }
 ];
 
-// ===== PROJECT SPLIT =====
+// ===== STORAGE =====
+
+let opgeslagen = JSON.parse(localStorage.getItem("projecten")) || [];
+
+function saveStorage(){
+localStorage.setItem("projecten", JSON.stringify(opgeslagen));
+}
+
+// ===== HULP FUNCTIES =====
+
 function splitProjecten(text){
 return text.split(/(?=projekt|maßnahme|ausschreibung)/gi);
 }
 
-// ===== WOORD TELLEN =====
 function telWoord(text, woord){
 let regex = new RegExp(woord, "gi");
 let m = text.match(regex);
 return m ? m.length : 0;
 }
 
-// ===== ANALYSE =====
 function analyseTekst(text){
 
 let score = 0;
@@ -127,7 +141,8 @@ else if(score>=40){status="Mogelijk"; kleur="orange";}
 return {score,redenen,status,kleur,text};
 }
 
-// ===== RUN =====
+// ===== ANALYSE =====
+
 function runAnalyse(){
 
 let input = document.getElementById("mail").value;
@@ -137,48 +152,94 @@ let delen = splitProjecten(input);
 let resultaten = [];
 
 delen.forEach(d=>{
-let analyse = analyseTekst(d.toLowerCase());
-if(analyse.score !== 0){ // alleen relevante tonen
-resultaten.push(analyse);
+let a = analyseTekst(d.toLowerCase());
+if(a.score !== 0){
+resultaten.push(a);
 }
 });
 
-// sorteer op score
+// sorteer
 resultaten.sort((a,b)=>b.score-a.score);
 
-// render lijst
+// tonen
 let html="";
 resultaten.forEach((r,i)=>{
 html += `
-<div class="project" onclick="toonDetail(${i})">
-<b>${r.status}</b><br>
-Score: ${r.score}
+<div class="project">
+<b>${r.status}</b> | Score: ${r.score}
+<br>
+<button onclick="event.stopPropagation();opslaanProject(${i})">💾 Opslaan</button>
+<button onclick="event.stopPropagation();toonDetailAnalyse(${i})">🔍 Detail</button>
 </div>
 `;
 });
 
-document.getElementById("projectList").innerHTML =
+document.getElementById("resultaten").innerHTML =
 resultaten.length ? html : "Geen projecten gevonden";
 
-// opslaan voor gebruik
-window.currentResultaten = resultaten;
+window.currentAnalyse = resultaten;
+
+}
+
+// ===== OPSLAAN =====
+
+function opslaanProject(i){
+
+let p = window.currentAnalyse[i];
+
+opgeslagen.push(p);
+saveStorage();
+toonOpslag();
+
+alert("✅ Project opgeslagen!");
+
+}
+
+// ===== OPSLAG TONEN =====
+
+function toonOpslag(){
+
+let html="";
+
+opgeslagen.forEach((p,i)=>{
+html += `
+<div class="project" onclick="toonDetailOpslag(${i})">
+<b>${p.status}</b> | Score: ${p.score}
+</div>
+`;
+});
+
+document.getElementById("opslag").innerHTML =
+opgeslagen.length ? html : "Nog geen opgeslagen projecten";
 
 }
 
 // ===== DETAIL =====
-function toonDetail(i){
 
-let p = window.currentResultaten[i];
+function toonDetailAnalyse(i){
+let p = window.currentAnalyse[i];
+toonDetail(p);
+}
+
+function toonDetailOpslag(i){
+let p = opgeslagen[i];
+toonDetail(p);
+}
+
+function toonDetail(p){
 
 document.getElementById("detail").innerHTML = `
 <b>Status:</b> <span class="${p.kleur}">${p.status}</span><br>
 <b>Score:</b> ${p.score}<br><br>
 
-<b>Waarom:</b><br><br>
+<b>Waarom:</b><br>
 ${p.redenen.join("<br>")}
 `;
 
 }
+
+// ===== INIT =====
+toonOpslag();
 
 </script>
 
