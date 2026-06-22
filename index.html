@@ -6,8 +6,7 @@
 <title>Kanalbau AI v2.0</title>
 
 <style>
-
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial;}
 
 body{background:#eef2f7;display:flex;height:100vh;}
 
@@ -38,7 +37,7 @@ cursor:pointer;
 
 .menu button:hover{background:#2563eb;}
 
-.main{flex:1;padding:25px;overflow:auto;}
+.main{flex:1;padding:25px;}
 
 .cards{
 display:grid;
@@ -54,38 +53,32 @@ border-radius:12px;
 box-shadow:0 3px 10px rgba(0,0,0,.1);
 }
 
-.card h2{color:#2563eb;font-size:28px;}
-
 .panel{
 background:white;
 padding:20px;
 border-radius:12px;
 box-shadow:0 3px 10px rgba(0,0,0,.1);
-margin-bottom:20px;
 }
 
 textarea{
 width:100%;
 height:200px;
-padding:15px;
-border-radius:8px;
-border:1px solid #ccc;
+padding:10px;
 }
 
-button.analyse{
-margin-top:15px;
-padding:14px 25px;
+button{
+margin-top:10px;
+padding:12px 20px;
 background:#2563eb;
 color:white;
 border:none;
 border-radius:8px;
-font-size:16px;
 cursor:pointer;
 }
 
 .result{
-margin-top:20px;
-padding:20px;
+margin-top:15px;
+padding:15px;
 background:#f8fafc;
 border-radius:10px;
 }
@@ -93,8 +86,8 @@ border-radius:10px;
 .green{color:green;font-weight:bold;}
 .red{color:red;font-weight:bold;}
 .orange{color:orange;font-weight:bold;}
-
 </style>
+
 </head>
 
 <body>
@@ -103,10 +96,9 @@ border-radius:10px;
 <div class="logo">KANALBAU AI</div>
 
 <div class="menu">
-<button>🏠 Dashboard</button>
-<button>📧 Inbox</button>
-<button>📁 Projecten</button>
-<button>⭐ Favorieten</button>
+<button>Dashboard</button>
+<button>Inbox</button>
+<button>Projecten</button>
 </div>
 </div>
 
@@ -135,11 +127,11 @@ border-radius:10px;
 </div>
 
 <div class="panel">
-<h2>📧 Plak email</h2><br>
+<h2>Plak email</h2><br>
 
 <textarea id="mail"></textarea><br>
 
-<button class="analyse" onclick="analyseMail()">Analyseer</button>
+<button onclick="analyseMail()">Analyseer</button>
 
 <div class="result" id="result">Nog geen analyse</div>
 </div>
@@ -148,8 +140,7 @@ border-radius:10px;
 
 <script>
 
-// ===== DATA =====
-
+// keywords
 let keywords = [
 { woord:"kanalbau", score:40 },
 { woord:"tiefbau", score:30 },
@@ -163,111 +154,55 @@ let keywords = [
 { woord:"dach", score:-60 }
 ];
 
-let plaatsen = [
-"Dülmen","Ahaus","Münster","Bocholt","Borken",
-"Vreden","Coesfeld","Gescher","Ibbenbüren"
-];
+// plaatsen
+let plaatsen = ["Dülmen","Ahaus","Münster","Bocholt","Borken"];
 
-// ===== FUNCTIES =====
-
-function zoekPlaatsen(tekst){
-let gevonden=[];
-
-plaatsen.forEach(p=>{
-if(tekst.toLowerCase().includes(p.toLowerCase())){
-gevonden.push(p);
+function zoekPlaats(text){
+for(let p of plaatsen){
+if(text.includes(p.toLowerCase())){
+return p;
 }
-});
-
-return gevonden.length ? gevonden.join(", ") : "Onbekend";
 }
-
-function zoekDeadline(tekst){
-
-let regex1 = /\d{1,2}[.-]\d{1,2}[.-]\d{2,4}/g;
-let regex2 = /\d{1,2}\s(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\s\d{4}/gi;
-
-let m1 = tekst.match(regex1);
-let m2 = tekst.match(regex2);
-
-if(m1) return m1[0];
-if(m2) return m2[0];
-
-return "Niet gevonden";
-}
-
-function zoekOpdrachtgever(t){
-
-if(t.includes("stadt")) return "Stadt";
-if(t.includes("gemeinde")) return "Gemeinde";
-if(t.includes("kreis")) return "Kreis";
-if(t.includes("gmbh")) return "Bedrijf";
-
 return "Onbekend";
 }
 
-let projecten = JSON.parse(localStorage.getItem("projecten")) || [];
-
-function opslaan(p){
-projecten.push(p);
-localStorage.setItem("projecten", JSON.stringify(projecten));
-}
-
-// ===== HOOFDFUNCTIE =====
-
 function analyseMail(){
 
-let originele = document.getElementById("mail").value;
-let text = originele.toLowerCase();
+let tekst = document.getElementById("mail").value.toLowerCase();
 
 let score = 0;
 let redenen = [];
 
-// keyword analyse
+// analyse
 keywords.forEach(k=>{
-if(text.includes(k.woord)){
+if(tekst.includes(k.woord)){
 score += k.score;
-redenen.push((k.score>0?"✔ ":"✖ ")+k.woord);
+redenen.push((k.score>0?"✔ ":"✖ ") + k.woord);
 }
 });
-
-// extra data
-let plaats = zoekPlaatsen(originele);
-let deadline = zoekDeadline(originele);
-let opdrachtgever = zoekOpdrachtgever(text);
 
 // beoordeling
 let status="Niet interessant";
 let kleur="red";
 
-if(score>=80){ status="🔥 TOP PROJECT"; kleur="green"; }
-else if(score>=60){ status="ZEER INTERESSANT"; kleur="green"; }
-else if(score>=40){ status="MOGELIJK INTERESSANT"; kleur="orange"; }
+if(score >= 80){status="TOP PROJECT"; kleur="green";}
+else if(score >= 60){status="Interessant"; kleur="green";}
+else if(score >= 40){status="Misschien"; kleur="orange";}
+
+let plaats = zoekPlaats(tekst);
 
 // tellers
 document.getElementById("mailCount").innerHTML++;
-
-if(score>=80){
+if(score >= 80){
 document.getElementById("topCount").innerHTML++;
 }
 
-// opslaan
-opslaan({plaats,deadline,opdrachtgever,score,status});
-
-// output
-document.getElementById("result").innerHTML = `
-<h2>Analyse</h2><hr><br>
-
-<b>📍 Plaats:</b> ${plaats}<br>
-<b>📅 Deadline:</b> ${deadline}<br>
-<b>🏢 Opdrachtgever:</b> ${opdrachtgever}<br><br>
-
-<b>⭐ Score:</b> ${score}/100<br>
-<b>Status:</b> <span class="${kleur}">${status}</span><br><br>
-
-<b>Waarom:</b><br><br>
-${redenen.join("<br>")}
-`;
+// resultaat
+document.getElementById("result").innerHTML =
+"<b>Plaats:</b> "+plaats+"<br><br>"+
+"<b>Score:</b> "+score+"<br>"+
+"<b>Status:</b> <span class='"+kleur+"'>"+status+"</span><br><br>"+
+redenen.join("<br>");
 
 }
 
@@ -275,3 +210,4 @@ ${redenen.join("<br>")}
 
 </body>
 </html>
+``
