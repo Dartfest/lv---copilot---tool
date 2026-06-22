@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Dashboard + Inbox</title>
+<title>Tool</title>
 
 <style>
 body {
@@ -37,6 +37,7 @@ body {
   margin-bottom: 10px;
   padding: 10px;
   border-radius: 5px;
+  cursor: pointer;
 }
 
 .top {
@@ -47,14 +48,33 @@ body {
 .hidden {
   display: none;
 }
+
+button {
+  padding: 10px;
+  margin-top: 20px;
+}
 </style>
 
 <script>
 function showPage(page) {
   document.getElementById("dashboard").classList.add("hidden");
   document.getElementById("inbox").classList.add("hidden");
+  document.getElementById("detail").classList.add("hidden");
 
   document.getElementById(page).classList.remove("hidden");
+}
+
+function openDetail(title, place, client, deadline, score) {
+  document.getElementById("dashboard").classList.add("hidden");
+  document.getElementById("inbox").classList.add("hidden");
+
+  document.getElementById("detail").classList.remove("hidden");
+
+  document.getElementById("detailTitle").innerText = title;
+  document.getElementById("detailPlace").innerText = "📍 " + place;
+  document.getElementById("detailClient").innerText = "🏗️ " + client;
+  document.getElementById("detailDeadline").innerText = "📅 " + deadline;
+  document.getElementById("detailScore").innerText = "🟢 Score: " + score;
 }
 </script>
 
@@ -62,14 +82,15 @@ function showPage(page) {
 
 <body>
 
+<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>Menu</h2>
 
   <a onclick="showPage('dashboard')">Dashboard</a>
   <a onclick="showPage('inbox')">Inbox</a>
-
 </div>
 
+<!-- CONTENT -->
 <div class="content">
 
   <!-- DASHBOARD -->
@@ -82,7 +103,14 @@ function showPage(page) {
   <div id="inbox" class="hidden">
     <h1>Inbox</h1>
 
-    <div class="item">
+    <!-- Project 1 -->
+    <div class="item" onclick="openDetail(
+      'Kanalbau Dortmund',
+      'Dortmund',
+      'Stadt Dortmund',
+      '01-07-2026',
+      '75'
+    )">
       <div class="top">
         <strong>Kanalbau Dortmund</strong>
         ⭐
@@ -91,7 +119,14 @@ function showPage(page) {
       <div>📅 01-07-2026 | 🟢 Score: 75</div>
     </div>
 
-    <div class="item">
+    <!-- Project 2 -->
+    <div class="item" onclick="openDetail(
+      'Tiefbau Essen',
+      'Essen',
+      'Stadt Essen',
+      '15-07-2026',
+      '65'
+    )">
       <div class="top">
         <strong>Tiefbau Essen</strong>
         ⭐
@@ -100,7 +135,14 @@ function showPage(page) {
       <div>📅 15-07-2026 | 🟡 Score: 65</div>
     </div>
 
-    <div class="item">
+    <!-- Project 3 -->
+    <div class="item" onclick="openDetail(
+      'Erschließung Bochum',
+      'Bochum',
+      'Stadt Bochum',
+      '20-07-2026',
+      '45'
+    )">
       <div class="top">
         <strong>Erschließung Bochum</strong>
         ⭐
@@ -109,6 +151,19 @@ function showPage(page) {
       <div>📅 20-07-2026 | 🔴 Score: 45</div>
     </div>
 
+  </div>
+
+  <!-- DETAIL -->
+  <div id="detail" class="hidden">
+    <h1>Project detail</h1>
+
+    <h2 id="detailTitle">Titel</h2>
+    <p id="detailPlace">Plaats</p>
+    <p id="detailClient">Opdrachtgever</p>
+    <p id="detailDeadline">Deadline</p>
+    <p id="detailScore">Score</p>
+
+    <button onclick="showPage('inbox')">⬅ Terug</button>
   </div>
 
 </div>
